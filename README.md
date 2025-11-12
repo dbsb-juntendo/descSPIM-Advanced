@@ -67,7 +67,7 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 ## Terms and Conditions （要修正）
 
 ### Creative Commons License
-This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+This work is licensed under a [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](https://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 By using **descSPIM-Advanced**, you agree to the following:
 
@@ -76,6 +76,7 @@ By using **descSPIM-Advanced**, you agree to the following:
 - Cite the original work in all publications and presentations.  
 - Authors are not responsible for damages or misuse.  
 - All disputes shall be governed by Japanese law.
+
 
 
 ---
