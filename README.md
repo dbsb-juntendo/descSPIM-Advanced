@@ -80,7 +80,7 @@ By using **descSPIM-Advanced**, you agree to the following:
 
 ---
 
-## References
+## References（要修正）
 
 - **Otomo, K. et al.** *descSPIM: an affordable and easy-to-build light-sheet microscope optimized for tissue clearing techniques.* **Nat. Commun. 15, 4941 (2024).**  
 - **Susaki, E. A. et al.** *Versatile whole-organ/body staining and imaging based on electrolyte-gel properties of biological tissues.* **Nat. Commun. 11, 1982 (2020).**  
