@@ -13,7 +13,7 @@ Building on the open-hardware movement, we previously developed **descSPIM (desk
 Since its introduction, **over fifty independently built systems** have been established worldwide and applied by non-specialist life scientists across diverse research domains.
 
 However, the simplicity-first design of descSPIM-basic imposed several limitations in advanced imaging contexts.  
-The **single-side illumination** configuration left residual striping when imaging large cleared samples that exceeded a single field of view, requiring multi-region acquisition followed by advanced stitching and registration. The **low-magnification detection** restricted subcellular resolution, and **multicolor imaging** was limited to three to four excitation channels. Furthermore, there remained room for further cost optimization and optical simplification.
+The **single-side illumination** configuration left residual striping when imaging large cleared samples that exceeded a single field of view, requiring multi-region acquisition followed by advanced stitching and registration. The **low-magnification detection** restricted subcellular resolution, and **multicolor imaging** was limited to three to four excitation channels. Furthermore, there remained room for **further cost optimization and optical simplification**.
 
 ---
 
