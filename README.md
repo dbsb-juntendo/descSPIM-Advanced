@@ -2,8 +2,8 @@
 
 **descSPIM-Advanced: scalable and accessible light-sheet microscopy platform for cleared-tissue imaging**
 
-<img src="https://github.com/user-attachments/assets/fe5b47da-0e0b-48b5-a94f-35260398d481" width="150" />
-<img src="https://github.com/user-attachments/assets/cac701c9-6297-4377-a2f3-9f7a7ea3525c" width="175" />
+<img src="https://github.com/user-attachments/assets/fe5b47da-0e0b-48b5-a94f-35260398d481" width="300" />
+<img src="https://github.com/user-attachments/assets/cac701c9-6297-4377-a2f3-9f7a7ea3525c" width="350" />
 
 ---
 
