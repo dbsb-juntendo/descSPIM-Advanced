@@ -2,8 +2,7 @@
 
 **descSPIM-Advanced: scalable and accessible light-sheet microscopy platform for cleared-tissue imaging**
 
-<img src="https://github.com/user-attachments/assets/fe5b47da-0e0b-48b5-a94f-35260398d481" width="300" />
-<img src="https://github.com/user-attachments/assets/cac701c9-6297-4377-a2f3-9f7a7ea3525c" width="350" />
+
 
 ---
 
@@ -14,6 +13,9 @@ Since its introduction, **over fifty independently built systems** have been est
 
 However, the simplicity-first design of descSPIM-basic imposed several limitations in advanced imaging contexts.  
 The **single-side illumination** configuration left residual striping when imaging large cleared samples that exceeded a single field of view, requiring multi-region acquisition followed by advanced stitching and registration. The **low-magnification detection** restricted subcellular resolution, and **multicolor imaging** was limited to three to four excitation channels. Furthermore, there remained room for **further cost optimization and optical simplification**.
+
+<img src="https://github.com/user-attachments/assets/fe5b47da-0e0b-48b5-a94f-35260398d481" width="300" />
+<img src="https://github.com/user-attachments/assets/cac701c9-6297-4377-a2f3-9f7a7ea3525c" width="350" />
 
 ---
 
