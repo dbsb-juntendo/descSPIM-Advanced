@@ -14,7 +14,7 @@ However, the simplicity-first design of descSPIM-basic imposed several limitatio
 
 **descSPIM-Advanced is aimed for overcoming these limitations**, providing expanded whole-organ field-of-view imaging, subcellular-resolution performance, ultra-multicolor capability, and a more accessible low-cost option depending on the selected configuration. These goals are realized through four interoperable variants — FullMoon, DeepSky, Galaxy, and SLIM — that extend both the conceptual and functional range of the original descSPIM-basic.
 
-<img src="https://github.com/user-attachments/assets/fe5b47da-0e0b-48b5-a94f-35260398d481" width="300" />
+<img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="300" />
 <img src="https://github.com/user-attachments/assets/cac701c9-6297-4377-a2f3-9f7a7ea3525c" width="350" />
 
 ---
