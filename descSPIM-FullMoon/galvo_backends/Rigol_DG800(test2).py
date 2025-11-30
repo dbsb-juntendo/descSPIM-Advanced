@@ -287,6 +287,26 @@ class RigolDG800Backend(IGalvoBackend):
             logger.exception(msg)
             self.sig_error.emit(msg)
 
+    def _query(self, cmd: str) -> Optional[str]:
+        """
+        SCPI クエリ送信ヘルパ（write+read をまとめる）
+        失敗時は None を返し、sig_error に流す。
+        """
+        if self._inst is None:
+            self.sig_error.emit(f"not connected (query='{cmd}')")
+            return None
+        try:
+            logger.debug("RigolDG800 QUERY: %s", cmd)
+            # pyvisa の query() を使う方が安全
+            resp = self._inst.query(cmd)
+            return str(resp).strip()
+        except Exception as e:
+            msg = f"SCPI query error ({cmd}): {e}"
+            logger.exception(msg)
+            self.sig_error.emit(msg)
+            return None
+
+
     def _update_state(self, ch_id: str, key: str, value: Any) -> None:
         ch_state = self._state.get(ch_id)
         if ch_state is None:
@@ -400,11 +420,97 @@ class RigolDG800Backend(IGalvoBackend):
 
     def query_status(self) -> Dict[str, Any]:
         """
-        現状:
-          ・SCPI からの実測値は読まず、ローカルキャッシュ _state を返すだけ。
-          ・必要になれば :SOURce:APPLy? や :OUTPut? をパースする実装を追加する。
+        実機から :SOURceN:APPLy? / :OUTPutN? を読んで _state を更新し、返す。
+
+        :SOURceN:APPLy? の戻り値（例）:
+            "SQU,1.000000E+03,2.000000E+00,3.000000E+00,4.000000E+00"
+            → waveform, freq[Hz], amp[Vpp], offset[V], phase[deg]
+        :OUTPutN? の戻り値:
+            ON / OFF
         """
-        return {"channels": {ch_id: dict(v) for ch_id, v in self._state.items()}}
+        # 接続されていない場合はローカルキャッシュをそのまま返す
+        if self._inst is None:
+            return {"channels": {ch_id: dict(v) for ch_id, v in self._state.items()}}
+
+        # APPLy? の波形名 → UI 用波形名へのマップ
+        # ここではガルボ UI の 4 種類に落とす
+        wave_map = {
+            "SIN": "sine",
+            "SQU": "square",
+            # RAMP は triangle/sawtooth 両方の元なので、とりあえず triangle に寄せる
+            "RAMP": "triangle",
+            # その他 (PULSE, NOISE, DC, USER, ...) は既存値を維持する
+        }
+
+        for idx in (1, 2):
+            # 1ch 機のときは CH2 を読み飛ばす
+            if idx > self._num_channels:
+                continue
+
+            ch_id = f"CH{idx}"
+            ch_state = self._state.get(ch_id, {})
+            if not isinstance(ch_state, dict):
+                ch_state = {}
+                self._state[ch_id] = ch_state
+
+            # ---- 出力 ON/OFF ----
+            out_resp = self._query(f":OUTPut{idx}?")
+            if out_resp is not None:
+                s = out_resp.strip().upper()
+                if s.startswith("ON") or s.startswith("1"):
+                    ch_state["enabled"] = True
+                elif s.startswith("OFF") or s.startswith("0"):
+                    ch_state["enabled"] = False
+                # それ以外の値は無視して既存値を保持
+
+            # ---- 波形 / 周波数 / 振幅 / オフセット ----
+            appl_resp = self._query(f":SOURce{idx}:APPLy?")
+            if appl_resp is not None:
+                try:
+                    txt = appl_resp.strip()
+                    if txt.startswith('"') and txt.endswith('"') and len(txt) >= 2:
+                        txt = txt[1:-1]
+                    parts = [p.strip() for p in txt.split(",")]
+                    # parts[0] = waveform 名 (SIN/SQU/RAMP/...)
+                    if len(parts) >= 1 and parts[0]:
+                        wf_raw = parts[0].upper()
+                        wf_ui = wave_map.get(wf_raw)
+                        if wf_ui is not None:
+                            ch_state["waveform"] = wf_ui
+                        else:
+                            # 未対応の波形は既存値を維持
+                            pass
+
+                    # parts[1] = freq [Hz]
+                    if len(parts) >= 2 and parts[1] and parts[1].upper() != "DEF":
+                        try:
+                            ch_state["freq"] = float(parts[1])
+                        except ValueError:
+                            pass
+
+                    # parts[2] = amp [Vpp]
+                    if len(parts) >= 3 and parts[2] and parts[2].upper() != "DEF":
+                        try:
+                            ch_state["amp"] = float(parts[2])
+                        except ValueError:
+                            pass
+
+                    # parts[3] = offset [V]
+                    if len(parts) >= 4 and parts[3] and parts[3].upper() != "DEF":
+                        try:
+                            ch_state["offset"] = float(parts[3])
+                        except ValueError:
+                            pass
+
+                    # phase (parts[4]) は現状使わないので無視
+                except Exception as e:
+                    self.sig_error.emit(f"query_status parse error (CH{idx}): {e}")
+
+        # 更新済み _state のコピーを返す
+        return {
+            "channels": {ch_id: dict(v) for ch_id, v in self._state.items()}
+        }
+
 
     def emergency_shutdown(self) -> None:
         # 全チャネルの出力 OFF
