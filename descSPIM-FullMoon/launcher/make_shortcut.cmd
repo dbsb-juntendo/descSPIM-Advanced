@@ -1,11 +1,9 @@
 @echo off
 
-rem ---- run_app.bat を生成 ----
 echo @echo off > "%~dp0run_app.bat"
 echo cd /d "%%~dp0\.." >> "%~dp0run_app.bat"
 echo .myenv-descSPIM-Fullmoon\Scripts\python Main.py >> "%~dp0run_app.bat"
 
-rem ----（ここから下がショートカット生成処理）----
 set "TARGET=%~dp0run_app.bat"
 set "SHORTCUT=%USERPROFILE%\Desktop\descSPIM-Fullmoon.lnk"
 set "ICON=%~dp0descSPIM.ico"
@@ -22,6 +20,6 @@ set "VBS=%TEMP%\_tmp_descspim_%RANDOM%.vbs"
 cscript //nologo "%VBS%"
 del "%VBS%"
 
-echo ショートカットを作成しました:
+echo Shortcut has been created:
 echo   %SHORTCUT%
 pause
