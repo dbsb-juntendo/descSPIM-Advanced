@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-filterchanger_backends/Dummy_Simulater.py
+filter_backends/Dummy_Simulater.py
 
 ダミーの電動フィルターチェンジャー用 Backend。
 - IFilterBackend を実装し、スロットを持つ。
@@ -15,7 +15,7 @@ from typing import Dict
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QObject, QTimer
 
-from filterchanger_backends.filterchanger_backend_base import IFilterBackend
+from filter_backends.filter_backend_base import IFilterBackend
 
 
 class DummySimulatedFilterBackend(IFilterBackend):
