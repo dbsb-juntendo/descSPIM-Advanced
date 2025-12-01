@@ -3,47 +3,11 @@
 from .stage_backend_base import IStageBackend, StepDirection
 from timing_logger import TimingLogger
 
-import os, time
-from contextlib import contextmanager
-from enum import IntEnum
-
+import time
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Slot, QSettings
 
-# ---- XA SDK imports ----
-from xa_sdk.products.kdc101 import KDC101
-from xa_sdk.shared.tlmc_type_structures import *
-from xa_sdk.native_sdks.xa_sdk import XASDK
-
-
-LIBDIR = r"C:\Program Files\Thorlabs XA\SDK\Native (C, C++)\Libraries\x64"
-XAROOT = r"C:\Program Files\Thorlabs XA"
-os.add_dll_directory(LIBDIR)
-
-_XA_STARTED = False
-
-def ensure_xa_started():
-    """
-    XA SDK をプロセス全体で一度だけ startup する。
-    複数の backend インスタンスから呼ばれても問題ないようにガード。
-    """
-    global _XA_STARTED
-    if _XA_STARTED:
-        return
-    with pushd(LIBDIR):
-        XASDK.try_load_library(__file__)
-    XASDK.startup(XAROOT)
-    _XA_STARTED = True
-
-
-@contextmanager
-def pushd(p: str):
-    cur = os.getcwd()
-    os.chdir(p)
-    try:
-        yield
-    finally:
-        os.chdir(cur)
+from .internal import xa_shared
 
 
 class ThorlabsKDC101Backend(IStageBackend):
@@ -78,11 +42,11 @@ class ThorlabsKDC101Backend(IStageBackend):
         self.serial: str = ""
         self.product_code: str = "Z825"
 
-        self.device: KDC101 | None = None
+        self.device = None  # type: ignore[assignment]
         self._start_mm: float | None = None
 
         # 連続移動用の現在方向（KDC101 API の MoveDirection）
-        self._move_direction = TLMC_MoveDirection.Move_Direction_Reverse
+        self._move_direction = None
         self._v_mm_s = 0.04
         self._a_mm_s2 = 1.5
         self._jog_active = False
@@ -111,7 +75,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         self.req_return.connect(self._motion_worker.do_return, QtCore.Qt.QueuedConnection)
 
         self._motion_thread.start()
-
 
     # ---- util ----
     def show_setup_dialog(self, parent=None) -> bool:
@@ -255,10 +218,15 @@ class ThorlabsKDC101Backend(IStageBackend):
                 raise ValueError("serial not set")
 
             # グローバルに一度だけ SDK を初期化
-            ensure_xa_started()
+            xa_shared.ensure_started()
+            print("[ThorlabsKDC101Backend] XA started")  # デバッグ用
 
-            self.device = KDC101(self.serial, "", TLMC_OperatingModes.Default)
-            self.device.set_enable_state(TLMC_ChannelEnableStates.ChannelEnabled)
+            self.device = xa_shared.KDC101(
+                self.serial, "", xa_shared.TLMC_OperatingModes.Default
+            )
+            self.device.set_enable_state(
+                xa_shared.TLMC_ChannelEnableStates.ChannelEnabled
+            )
 
             # 製品コード設定
             self.device.set_connected_product(self.product_code)
@@ -326,9 +294,9 @@ class ThorlabsKDC101Backend(IStageBackend):
         # KDC101 実機では API の Reverse が ＋方向なので、
         # 0 → Move_Direction_Reverse, 1 → Move_Direction_Forward にする
         if dir_index == 0:
-            self._move_direction = TLMC_MoveDirection.Move_Direction_Reverse
+            self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
         else:
-            self._move_direction = TLMC_MoveDirection.Move_Direction_Forward
+            self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
 
         if not self._connected or self.device is None:
             self.sig_status.emit("no device")
@@ -338,8 +306,8 @@ class ThorlabsKDC101Backend(IStageBackend):
             v_dev = int(
                 round(
                     self.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         self._v_mm_s,
                     )
                 )
@@ -347,8 +315,8 @@ class ThorlabsKDC101Backend(IStageBackend):
             a_dev = int(
                 round(
                     self.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         self._a_mm_s2,
                     )
                 )
@@ -363,7 +331,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         if not self._connected or self.device is None:
             self.sig_error.emit("home: not connected")
             return
-        # 実処理は worker スレッドへ
         self.req_home.emit()
 
     @Slot()
@@ -372,9 +339,9 @@ class ThorlabsKDC101Backend(IStageBackend):
             self.sig_error.emit("register_start_point: not connected")
             return
         try:
-            c = self.device.get_position_counter(TLMC_Wait.TLMC_InfiniteWait)
+            c = self.device.get_position_counter(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
             self._start_mm = self.device.convert_from_device_units_to_physical(
-                TLMC_ScaleType.TLMC_ScaleType_Distance, c
+                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance, c
             ).converted_value
             self.sig_status.emit(f"Start pos registered: {self._start_mm:.6f} mm")
             self.sig_startpos_updated.emit(self._start_mm)
@@ -389,7 +356,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         if self._start_mm is None:
             self.sig_error.emit("go_to_start_position: start position not registered")
             return
-        # 実処理は worker スレッドへ
         self.req_go_start.emit()
 
     @Slot()
@@ -397,7 +363,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         if not self._connected or self.device is None:
             self.sig_error.emit("start_continuous: not connected")
             return
-        # 実処理は worker スレッドへ
         self.req_start_continuous.emit()
 
     @Slot()
@@ -405,7 +370,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         if not self._connected or self.device is None:
             self.sig_error.emit("stop_only: not connected")
             return
-        # 実処理は worker スレッドへ
         self.req_stop_only.emit()
 
     @Slot(int)
@@ -413,7 +377,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         if not self._connected or self.device is None:
             self.sig_error.emit("start: not connected")
             return
-        # 実処理は worker スレッドへ
         self.req_start_jog.emit(direction_index)
 
     @Slot()
@@ -421,63 +384,27 @@ class ThorlabsKDC101Backend(IStageBackend):
         if not self._connected or self.device is None:
             self.sig_error.emit("stop: not connected")
             return
-        # 実処理は worker スレッドへ
         self.req_stop_jog.emit()
-
-    """
-    @Slot(int)
-    def step(self, direction_value: int):
-        
-        # direction_value: StepDirection の値（+1 = Forward, -1 = Reverse）
-        # Step size / velocity / acceleration は configure_step() で事前に設定された値を使う。
-        
-        if not self._connected or self.device is None:
-            self.sig_error.emit("step: not connected")
-            return
-
-        try:
-            direction = StepDirection(direction_value)
-        except ValueError:
-            self.sig_error.emit(f"step: invalid direction {direction_value}")
-            return
-
-        # 実処理は worker スレッドへ
-        self.req_step.emit(int(direction))
-    """
 
     def step(self, direction: StepDirection):
         """
         direction: StepDirection.FORWARD (= +1) / StepDirection.REVERSE (= -1)
-
         Step size / velocity / acceleration は configure_step() で事前に設定された値を使う。
         """
         if not self._connected or self.device is None:
             self.sig_error.emit("step: not connected")
             return
-
-        # Qt の Signal には IntEnum の値をそのまま流す（内部では int として扱われる）
         self.req_step.emit(int(direction))
 
-        
     @Slot(str)
-    #def start_return_async(self, direction_for_log: str):
     def start_return(self, direction_for_log: str):
-        
-        """
-        録画終了時などに「開始位置へ戻る」ための非同期処理を開始する。
-
-        direction_for_log:
-            timing_logger があれば、その CSV を flush するディレクトリ。
-        """
         if not self._connected or self.device is None:
             self.sig_error.emit("stop return: not connected")
             return
         if self._returning:
             self.sig_status.emit("already returning...")
             return
-
         self._returning = True
-        # 実処理は同じ motion worker スレッドで行う
         self.req_return.emit(direction_for_log)
 
 
@@ -502,7 +429,7 @@ class _MotionWorker(QtCore.QObject):
             if c.timing:
                 c.timing.log_event("HOME_SINGLE_BEGIN")
             c.sig_status.emit("homing...")
-            c.device.home(TLMC_Wait.TLMC_InfiniteWait)
+            c.device.home(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
             if c.timing:
                 c.timing.log_event("HOME_SINGLE_DONE")
             c.sig_status.emit("homed.")
@@ -532,8 +459,8 @@ class _MotionWorker(QtCore.QObject):
                 v_dev_fast = int(
                     round(
                         c.device.convert_from_physical_to_device(
-                            TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                            TLMC_Unit.TLMC_Unit_Millimetres,
+                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                             RET_V_MM_S,
                         )
                     )
@@ -541,8 +468,8 @@ class _MotionWorker(QtCore.QObject):
                 a_dev_fast = int(
                     round(
                         c.device.convert_from_physical_to_device(
-                            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                            TLMC_Unit.TLMC_Unit_Millimetres,
+                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                             RET_A_MM_S2,
                         )
                     )
@@ -555,16 +482,16 @@ class _MotionWorker(QtCore.QObject):
             cnt = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         c._start_mm,
                     )
                 )
             )
             c.device.move_absolute(
-                TLMC_MoveModes.MoveMode_Absolute,
+                xa_shared.TLMC_MoveModes.MoveMode_Absolute,
                 cnt,
-                TLMC_Wait.TLMC_InfiniteWait,
+                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
             )
             c.sig_status.emit("at start position.")
 
@@ -577,8 +504,8 @@ class _MotionWorker(QtCore.QObject):
                     v_dev_orig = int(
                         round(
                             c.device.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
+                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_v,
                             )
                         )
@@ -586,8 +513,8 @@ class _MotionWorker(QtCore.QObject):
                     a_dev_orig = int(
                         round(
                             c.device.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
+                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_a,
                             )
                         )
@@ -605,7 +532,7 @@ class _MotionWorker(QtCore.QObject):
         try:
             if c.timing:
                 c.timing.log_event("STAGE_START")
-            c.device.move_continuous(c._move_direction, TLMC_Wait.TLMC_NoWait)
+            c.device.move_continuous(c._move_direction, xa_shared.TLMC_Wait.TLMC_NoWait)
             c.sig_status.emit("continuous move started.")
         except Exception as e:
             c.sig_error.emit(f"start_continuous: {e}")
@@ -620,7 +547,8 @@ class _MotionWorker(QtCore.QObject):
             if c.timing:
                 c.timing.log_event("STAGE_STOP_CMD")
             c.device.stop(
-                TLMC_StopModes.StopMode_Profiled, TLMC_Wait.TLMC_InfiniteWait
+                xa_shared.TLMC_StopModes.StopMode_Profiled,
+                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
             )
             c.sig_status.emit("stopped (test).")
         except Exception as e:
@@ -643,8 +571,8 @@ class _MotionWorker(QtCore.QObject):
             v_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         v_mm_s,
                     )
                 )
@@ -652,8 +580,8 @@ class _MotionWorker(QtCore.QObject):
             a_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         a_mm_s2,
                     )
                 )
@@ -663,13 +591,13 @@ class _MotionWorker(QtCore.QObject):
             # StagePane: direction_index == 0 → 「↑↑」= Forward（＋）
             # → API 側では Reverse を呼ぶ（KDC101 仕様）
             if direction_index == 0:
-                direction = TLMC_MoveDirection.Move_Direction_Reverse
+                direction = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
                 direction_label = "Forward"
             else:
-                direction = TLMC_MoveDirection.Move_Direction_Forward
+                direction = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
                 direction_label = "Reverse"
 
-            c.device.move_continuous(direction, TLMC_Wait.TLMC_NoWait)
+            c.device.move_continuous(direction, xa_shared.TLMC_Wait.TLMC_NoWait)
             c._jog_active = True
             c.sig_status.emit(f"started ({direction_label})")
 
@@ -687,7 +615,8 @@ class _MotionWorker(QtCore.QObject):
 
         try:
             c.device.stop(
-                TLMC_StopModes.StopMode_Profiled, TLMC_Wait.TLMC_InfiniteWait
+                xa_shared.TLMC_StopModes.StopMode_Profiled,
+                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
             )
 
             v_mm_s = c._v_mm_s
@@ -696,8 +625,8 @@ class _MotionWorker(QtCore.QObject):
             v_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         v_mm_s,
                     )
                 )
@@ -705,8 +634,8 @@ class _MotionWorker(QtCore.QObject):
             a_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         a_mm_s2,
                     )
                 )
@@ -719,87 +648,6 @@ class _MotionWorker(QtCore.QObject):
         except Exception as e:
             c.sig_error.emit(f"stop: {e}")
 
-    """
-    @Slot(int)
-    def do_step(self, direction_value: int):
-        c = self._b
-        if not c._connected or c.device is None:
-            c.sig_error.emit("step: not connected")
-            return
-
-        try:
-            direction = StepDirection(direction_value)
-        except ValueError:
-            c.sig_error.emit(f"step: invalid direction {direction_value}")
-            return
-
-        try:
-            # --- Step size ---
-            step_mm = c._step_mm if c._step_mm > 0 else c.FINE_STEP_MM
-
-            step_counts = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
-                        step_mm,
-                    )
-                )
-            )
-            if step_counts <= 0:
-                step_counts = 1
-
-            # --- Step 用の速度・加速度 ---
-            v_mm_s = c._step_v_mm_s if c._step_v_mm_s > 0 else c.JOG_V_MM_S
-            a_mm_s2 = c._step_a_mm_s2 if c._step_a_mm_s2 > 0 else c.JOG_A_MM_S2
-
-            v_dev = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
-                        v_mm_s,
-                    )
-                )
-            )
-            a_dev = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
-                        a_mm_s2,
-                    )
-                )
-            )
-
-            jp = c.device.get_move_jog_params(TLMC_Wait.TLMC_InfiniteWait)
-
-            c.device.set_move_jog_params(
-                TLMC_JogModes.JogMode_SingleStep,
-                step_counts,
-                jp.min_velocity,
-                v_dev,
-                a_dev,
-                TLMC_JogStopModes.JogStopMode_Profiled,
-            )
-
-            # 方向は enum StepDirection から決める
-            if direction is StepDirection.Forward:
-                # UI: Forward（↑） → API: Reverse
-                tl_direction = TLMC_MoveDirection.Move_Direction_Reverse
-                direction_label = "Forward"
-            else:
-                # UI: Reverse（↓） → API: Forward
-                tl_direction = TLMC_MoveDirection.Move_Direction_Forward
-                direction_label = "Reverse"
-
-            c.device.move_jog(tl_direction, TLMC_Wait.TLMC_InfiniteWait)
-            c.sig_status.emit(f"{direction_label} {step_mm*1000:.1f} um (step)")
-
-        except Exception as e:
-            c.sig_error.emit(f"step: {e}")
-    """
-
     @Slot(int)
     def do_step(self, direction_value: int):
         c = self._b
@@ -816,8 +664,8 @@ class _MotionWorker(QtCore.QObject):
             step_counts = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         step_mm,
                     )
                 )
@@ -832,8 +680,8 @@ class _MotionWorker(QtCore.QObject):
             v_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         v_mm_s,
                     )
                 )
@@ -841,40 +689,39 @@ class _MotionWorker(QtCore.QObject):
             a_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
+                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                         a_mm_s2,
                     )
                 )
             )
 
-            jp = c.device.get_move_jog_params(TLMC_Wait.TLMC_InfiniteWait)
+            jp = c.device.get_move_jog_params(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
 
             c.device.set_move_jog_params(
-                TLMC_JogModes.JogMode_SingleStep,
+                xa_shared.TLMC_JogModes.JogMode_SingleStep,
                 step_counts,
                 jp.min_velocity,
                 v_dev,
                 a_dev,
-                TLMC_JogStopModes.JogStopMode_Profiled,
+                xa_shared.TLMC_JogStopModes.JogStopMode_Profiled,
             )
 
             # 方向は StepDirection から決める
             if direction is StepDirection.FORWARD:
                 # UI: Forward（↑） → API: Reverse（＋方向）
-                d = TLMC_MoveDirection.Move_Direction_Reverse
+                d = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
                 d_label = "Forward"
             else:
                 # UI: Reverse（↓） → API: Forward（－方向）
-                d = TLMC_MoveDirection.Move_Direction_Forward
+                d = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
                 d_label = "Reverse"
 
-            c.device.move_jog(d, TLMC_Wait.TLMC_InfiniteWait)
+            c.device.move_jog(d, xa_shared.TLMC_Wait.TLMC_InfiniteWait)
             c.sig_status.emit(f"{d_label} {step_mm*1000:.1f} um (step)")
 
         except Exception as e:
             c.sig_error.emit(f"step: {e}")
-
 
     @Slot(str)
     def do_return(self, direction_for_log: str):
@@ -894,9 +741,6 @@ class _MotionWorker(QtCore.QObject):
 
             if c.timing:
                 c.timing.log_event("STAGE_STOP_CMD")
-            #c.device.stop(
-            #    TLMC_StopModes.StopMode_Profiled, TLMC_Wait.TLMC_InfiniteWait
-            #)
 
             c.sig_status.emit("waiting briefly before returning to start position...")
             time.sleep(1)
@@ -911,8 +755,8 @@ class _MotionWorker(QtCore.QObject):
                 v_dev_fast = int(
                     round(
                         c.device.convert_from_physical_to_device(
-                            TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                            TLMC_Unit.TLMC_Unit_Millimetres,
+                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                             RET_V_MM_S,
                         )
                     )
@@ -920,8 +764,8 @@ class _MotionWorker(QtCore.QObject):
                 a_dev_fast = int(
                     round(
                         c.device.convert_from_physical_to_device(
-                            TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                            TLMC_Unit.TLMC_Unit_Millimetres,
+                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                             RET_A_MM_S2,
                         )
                     )
@@ -936,16 +780,16 @@ class _MotionWorker(QtCore.QObject):
                 cnt = int(
                     round(
                         c.device.convert_from_physical_to_device(
-                            TLMC_ScaleType.TLMC_ScaleType_Distance,
-                            TLMC_Unit.TLMC_Unit_Millimetres,
+                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                             c._start_mm,
                         )
                     )
                 )
                 c.device.move_absolute(
-                    TLMC_MoveModes.MoveMode_Absolute,
+                    xa_shared.TLMC_MoveModes.MoveMode_Absolute,
                     cnt,
-                    TLMC_Wait.TLMC_InfiniteWait,
+                    xa_shared.TLMC_Wait.TLMC_InfiniteWait,
                 )
                 if c.timing:
                     c.timing.log_event("RETURN_DONE")
@@ -961,8 +805,8 @@ class _MotionWorker(QtCore.QObject):
                     v_dev_orig = int(
                         round(
                             c.device.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
+                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_v,
                             )
                         )
@@ -970,8 +814,8 @@ class _MotionWorker(QtCore.QObject):
                     a_dev_orig = int(
                         round(
                             c.device.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
+                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_a,
                             )
                         )
