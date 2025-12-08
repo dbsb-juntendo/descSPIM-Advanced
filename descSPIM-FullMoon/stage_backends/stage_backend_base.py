@@ -184,14 +184,9 @@ class IStageBackend(QObject):
         """
         raise NotImplementedError
 
-    def start_return(self, direction_for_log: str) -> None:
+    def start_return(self) -> None:
         """
         必須:
             録画終了時などに「開始位置へ戻る」処理を開始する。
-
-        引数:
-            direction_for_log:
-                timing_logger を使う場合に、ログ書き出し先を表す文字列。
-                使わない backend では無視してよい。
         """
         raise NotImplementedError

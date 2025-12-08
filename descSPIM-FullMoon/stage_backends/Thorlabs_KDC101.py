@@ -53,7 +53,7 @@ class ThorlabsKDC101Backend(IStageBackend):
     req_stop_jog = QtCore.Signal()
     # StepDirection は IntEnum なので Signal(int) で値を渡す
     req_step = QtCore.Signal(int)        
-    req_return = QtCore.Signal(str)
+    req_return = QtCore.Signal()
 
     SETTINGS_GROUP_BASE = "StageBackend/Thorlabs_KDC101"
 
@@ -564,7 +564,7 @@ class ThorlabsKDC101Backend(IStageBackend):
 
     def step(self, direction: StepDirection):
         """
-        direction: StepDirection.FORWARD (= +1) / StepDirection.REVERSE (= -1)
+        direction: StepDirection.FORWARD (= 0) / StepDirection.REVERSE (= 1)
         Step size / velocity / acceleration は apply_step_params() で事前に設定された値を使う。
         """
         if not self._connected or self.device is None:
@@ -573,7 +573,7 @@ class ThorlabsKDC101Backend(IStageBackend):
         self.req_step.emit(int(direction))
 
     @Slot(str)
-    def start_return(self, direction_for_log: str):
+    def start_return(self):
         if not self._connected or self.device is None:
             self.sig_error.emit("stop return: not connected")
             return
@@ -581,7 +581,7 @@ class ThorlabsKDC101Backend(IStageBackend):
             self.sig_status.emit("already returning...")
             return
         self._returning = True
-        self.req_return.emit(direction_for_log)
+        self.req_return.emit()
 
 
 class _MotionWorker(QtCore.QObject):
@@ -853,7 +853,7 @@ class _MotionWorker(QtCore.QObject):
             c.sig_error.emit(f"step: {e}")
 
     @Slot(str)
-    def do_return(self, direction_for_log: str):
+    def do_return(self):
         """
         録画終了時などに「開始位置へ戻る」処理。
         以前の _ReturnWorker.run() を MotionWorker に統合。
@@ -864,12 +864,7 @@ class _MotionWorker(QtCore.QObject):
         try:
             if not c._connected or c.device is None:
                 c.sig_error.emit("stop return: not connected")
-                if direction_for_log and c.timing:
-                    c.timing.flush_to_csv(direction_for_log)
                 return
-
-            if c.timing:
-                c.timing.log_event("STAGE_STOP_CMD")
 
             c.sig_status.emit("waiting briefly before returning to start position...")
             time.sleep(1)
@@ -904,8 +899,6 @@ class _MotionWorker(QtCore.QObject):
                 c.sig_status.emit(f"warning: failed to set fast return speed: {ee}")
 
             if c._start_mm is not None:
-                if c.timing:
-                    c.timing.log_event("RETURN_BEGIN")
                 cnt = int(
                     round(
                         c.device.convert_from_physical_to_device(
@@ -920,8 +913,6 @@ class _MotionWorker(QtCore.QObject):
                     cnt,
                     xa_shared.TLMC_Wait.TLMC_InfiniteWait,
                 )
-                if c.timing:
-                    c.timing.log_event("RETURN_DONE")
 
             c.sig_status.emit("returned to start position.")
 
@@ -952,12 +943,6 @@ class _MotionWorker(QtCore.QObject):
                     c.device.set_velocity_params(0, a_dev_orig, v_dev_orig)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed: {ee}")
-
-            try:
-                if direction_for_log and c.timing:
-                    c.timing.flush_to_csv(direction_for_log)
-            except Exception:
-                pass
 
             c._returning = False
 

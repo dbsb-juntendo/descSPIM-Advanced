@@ -1,13 +1,6 @@
 # stage_backends/Thorlabs_KST101.py
 # -*- coding: utf-8 -*-
 
-
-# TODO: ↑↑と↓↓がステップになってる
-# TODO: ↑と↓のステップサイズが0.05mmに固定されてる
-# TODO: Start testがstepは動くけど、moveが動かない
-# TODO: Start recordingのstepはOKだけど、moveが動かない
-# TODO: settings...の内容がmotionworkerに渡ってない
-
 from .stage_backend_base import IStageBackend, StepDirection
 from timing_logger import TimingLogger
 
@@ -19,9 +12,9 @@ from contextlib import contextmanager
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Slot, QSettings
 
-import clr
-from System import Decimal as SysDecimal
-from System.Globalization import CultureInfo
+#import clr
+#from System import Decimal as SysDecimal
+#from System.Globalization import CultureInfo
 from dataclasses import dataclass, field
 
 
@@ -84,7 +77,7 @@ def pushd(p: str):
         os.chdir(cur)
 
 
-def _mkdec(x) -> SysDecimal:
+def _mkdec(x):  # -> SysDecimal:
     """Decimal.Parse + InvariantCulture で Real Units(mm 等) を渡す."""
     return SysDecimal.Parse(str(x), CultureInfo.InvariantCulture)
 
@@ -95,10 +88,16 @@ def ensure_kinesis_loaded():
     複数 backend インスタンスから呼ばれても安全。
     """
     global _KINESIS_LOADED
-    global DeviceManagerCLI, KCubeStepper, VelocityParameters, MotorDirection
+    global DeviceManagerCLI, KCubeStepper, VelocityParameters, MotorDirection, SysDecimal, CultureInfo
 
     if _KINESIS_LOADED:
         return
+    
+    import clr
+    from System import Decimal as _SysDecimal
+    from System.Globalization import CultureInfo as _CultureInfo
+    SysDecimal = _SysDecimal
+    CultureInfo = _CultureInfo
 
     if not os.path.isdir(KINESIS_LIBDIR):
         raise RuntimeError(f"KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
@@ -156,7 +155,7 @@ class ThorlabsKST101Backend(IStageBackend):
     req_stop_jog = QtCore.Signal()
     # StepDirection は IntEnum なので Signal(int) で値を渡す
     req_step = QtCore.Signal(int)        # StepDirection.value (0=FORWARD, 1=REVERSE)
-    req_return = QtCore.Signal(str)
+    req_return = QtCore.Signal()
 
     SETTINGS_GROUP_BASE = "StageBackend/Thorlabs_KST101"
 
@@ -312,18 +311,17 @@ class ThorlabsKST101Backend(IStageBackend):
         settings.endGroup()
         settings.sync()
 
-    """
+
     # KST101には必要ない？
-    def _update_move_direction_from_dir_index(self, dir_index: int) -> None:
-        # UI の dir_index (0/1) から KDC101 API 用 MoveDirection を更新する。
-        # StagePane: dir_index == 0 → "Forward"（＋方向に動いてほしい）
-        # KDC101 実機では API の Reverse が ＋方向なので、
-        # 0 → Move_Direction_Reverse, 1 → Move_Direction_Forward にする
-        if dir_index == 0:
-            self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
+    def _update_move_direction_from_dir_index(self, direction_value: int) -> None:
+        # UI の direction_value (0/1) から KST101 API 用 MoveDirection を更新する。
+        # 向きが逆なら、ここを修正する
+        if direction_value == 0:
+            self._move_direction = MotorDirection.Forward
         else:
-            self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
-    """
+            self._move_direction = MotorDirection.Backward
+
+
 
     def _apply_move_params_to_device(self) -> None:
         """
@@ -401,13 +399,7 @@ class ThorlabsKST101Backend(IStageBackend):
         if not self._connected or self.device is None:
             return
         try:
-            pos_dec = int(self.device.GetPositionCounter())
-            realUnit =  SysDecimal()
-            time.sleep(1)
-            self.device.GetRealValueFromDeviceUnit(pos_dec, realUnit, 0)
-            pos_mm = float(realUnit.ToString(CultureInfo.InvariantCulture))
-
-            self._current_mm = pos_mm
+            self._current_mm = self.device.Position
         except Exception as e:
             # 位置取得に失敗しても致命傷にはしない
             self.sig_status.emit(f"warning: failed to read current position: {e}")
@@ -549,7 +541,6 @@ class ThorlabsKST101Backend(IStageBackend):
     def apply_move_params(self, v_mm_s: float, a_mm_s2: float, dir_index: int):
         """
         連続移動用（move/jog/return 基準）のパラメータを更新して実機に適用する。
-        StagePane から呼ばれる既存のエントリポイント。
         """
         mv = self._config.move
         mv.v_mm_s = float(v_mm_s)
@@ -559,7 +550,7 @@ class ThorlabsKST101Backend(IStageBackend):
         # backend 内キャッシュを更新
         self._v_mm_s = mv.v_mm_s
         self._a_mm_s2 = mv.a_mm_s2
-        #self._update_move_direction_from_dir_index(mv.dir_index)
+        self._update_move_direction_from_dir_index(mv.dir_index)
 
         # 設定を保存
         self._save_settings()
@@ -573,8 +564,6 @@ class ThorlabsKST101Backend(IStageBackend):
     def apply_step_params(self, step_mm: float, v_mm_s: float, a_mm_s2: float, dir_index: int):
         """
         Step 移動用のパラメータを更新して保存する。
-        実機への反映は do_step() 内で毎回行う。
-        dir_index は move 側の方向フラグにも反映する。
         """
         st = self._config.step
         st.step_mm = float(step_mm)
@@ -587,8 +576,8 @@ class ThorlabsKST101Backend(IStageBackend):
         self._step_a_mm_s2 = st.a_mm_s2
 
         # 必要なら Step 用の「向き」も move 設定に反映
-        #self._config.move.dir_index = int(dir_index)
-        #self._update_move_direction_from_dir_index(self._config.move.dir_index)
+        self._config.move.dir_index = int(dir_index)
+        self._update_move_direction_from_dir_index(self._config.move.dir_index)
 
         self._save_settings()
 
@@ -630,11 +619,11 @@ class ThorlabsKST101Backend(IStageBackend):
         self.req_go_start.emit()
 
     @Slot(int)
-    def start_continuous(self, direction_index: int):
+    def start_continuous(self):
         if not self._connected or self.device is None:
             self.sig_error.emit("start_continuous: not connected")
             return
-        self.req_start_continuous.emit(direction_index)
+        self.req_start_continuous.emit()
 
 
     @Slot()
@@ -661,9 +650,7 @@ class ThorlabsKST101Backend(IStageBackend):
     def step(self, direction: StepDirection):
         """
         direction: StepDirection.FORWARD (= 0) / StepDirection.REVERSE (= 1)
-
-        Step size / velocity / acceleration は apply_step_params() で
-        事前に設定された値を使う想定。
+        Step size / velocity / acceleration は apply_step_params() で事前に設定された値を使う想定。
         """
         if not self._connected or self.device is None:
             self.sig_error.emit("step: not connected")
@@ -671,12 +658,10 @@ class ThorlabsKST101Backend(IStageBackend):
 
         self.req_step.emit(int(direction))
 
-    @Slot(str)
-    def start_return(self, direction_for_log: str):
+    @Slot()
+    def start_return(self):
         """
         録画終了時などに「開始位置へ戻る」ための非同期処理を開始する。
-        direction_for_log:
-            timing_logger があれば、その CSV を flush するディレクトリ。
         """
         if not self._connected or self.device is None:
             self.sig_error.emit("stop return: not connected")
@@ -686,14 +671,12 @@ class ThorlabsKST101Backend(IStageBackend):
             return
 
         self._returning = True
-        self.req_return.emit(direction_for_log)
+        self.req_return.emit()
 
 
 class _MotionWorker(QtCore.QObject):
     """
     実際に KST101 (KCubeStepper) を叩くスレッド用 worker。
-    Backend からの req_* シグナルだけを入口にして、
-    ここからのみ device.* を呼ぶ。
     """
 
     def __init__(self, backend: ThorlabsKST101Backend):
@@ -707,14 +690,9 @@ class _MotionWorker(QtCore.QObject):
             c.sig_error.emit("home: not connected")
             return
         try:
-            if c.timing:
-                c.timing.log_event("HOME_SINGLE_BEGIN")
             c.sig_status.emit("homing...")
-            # Kinesis サンプルと同じ Home(timeout) パターン
-            c.device.Home(60000)  # 60 s
+            c.device.Home(60000)              # Kinesis サンプルと同じ Home(timeout:60s) パターン
             c._current_mm = 0.0   # ホーム位置を 0 mm とみなす
-            if c.timing:
-                c.timing.log_event("HOME_SINGLE_DONE")
             c.sig_status.emit("homed.")
         except Exception as e:
             c.sig_error.emit(f"home: {e}")
@@ -738,8 +716,7 @@ class _MotionWorker(QtCore.QObject):
             RET_V_MM_S = 1.5
             RET_A_MM_S2 = 1.0
 
-            # 速度パラメータを一時的に早めにする
-            try:
+            try:            # 速度パラメータを一時的に早めにする
                 vp = VelocityParameters()
                 vp.Acceleration = _mkdec(RET_A_MM_S2)
                 vp.MaxVelocity = _mkdec(RET_V_MM_S)
@@ -749,10 +726,7 @@ class _MotionWorker(QtCore.QObject):
 
             c.sig_status.emit("returning to start position...")
             target = _mkdec(c._start_mm)
-            try:
-                c.device.MoveTo(target, 60000)
-            except Exception:
-                c.device.MoveTo(target)
+            c.device.MoveTo(target, 60000)
             c._current_mm = float(c._start_mm)
             c.sig_status.emit("at start position.")
 
@@ -760,8 +734,7 @@ class _MotionWorker(QtCore.QObject):
             c.sig_error.emit(f"go_to_start_position: {e}")
 
         finally:
-            # 元の速度に戻す
-            try:
+            try:            # 元の速度に戻す
                 if prev_v is not None and c.device is not None:
                     vp = VelocityParameters()
                     vp.Acceleration = _mkdec(prev_a)
@@ -804,7 +777,6 @@ class _MotionWorker(QtCore.QObject):
     def do_stop_only(self):
         """
         連続移動（MoveAtVelocity）を停止する。
-        StopProfiled() のみ使用する。
         """
         c = self._b
         if not c._connected or c.device is None:
@@ -812,15 +784,10 @@ class _MotionWorker(QtCore.QObject):
             return
 
         try:
-            if c.timing:
-                c.timing.log_event("CONTINUOUS_STOP_CMD")
-
-            # プロファイル停止のみを使う
             c.device.Stop()
             c._continuous_moving = False
 
-            # 停止後に位置を実機から同期
-            try:
+            try:            # 停止後に位置を実機から同期
                 c._update_current_from_device()
             except Exception:
                 pass
@@ -834,8 +801,6 @@ class _MotionWorker(QtCore.QObject):
     def do_start_jog(self, direction_index: int):
         """
         Jog(↑↑/↓↓)用:
-        move 用パラメータ(_v_mm_s, _a_mm_s2)を適用して MoveAtVelocity(...) を開始する。
-        Stop ボタンで do_stop_jog が呼ばれる前提。
         """
         c = self._b
         if not c._connected or c.device is None:
@@ -848,25 +813,12 @@ class _MotionWorker(QtCore.QObject):
             return
 
         try:
-            """
-            # 現在の move パラメータを Kinesis 側に適用
-            try:
-                vp = VelocityParameters()
-                vp.Acceleration = _mkdec(c._a_mm_s2)
-                vp.MaxVelocity  = _mkdec(c._v_mm_s)
-                c.device.SetVelocityParams(vp)
-            except Exception as ee:
-                c.sig_status.emit(f"warning: failed to apply jog move params: {ee}")
-            """
             if direction_index == 0:
                 direction = MotorDirection.Forward
                 d_label = "Forward"
             else:
                 direction = MotorDirection.Backward
                 d_label = "Backward"
-
-            if c.timing:
-                c.timing.log_event("JOG_BEGIN")
 
             c.device.MoveContinuous(direction)
             c._continuous_moving = True
@@ -921,7 +873,7 @@ class _MotionWorker(QtCore.QObject):
             c.sig_error.emit("step: not connected")
             return
 
-        if direction_index == 0:
+        if direction_value == 0:
             direction = MotorDirection.Forward
             d_label = "Forward"
         else:
@@ -936,7 +888,7 @@ class _MotionWorker(QtCore.QObject):
             c.sig_error.emit(f"step: {e}")
 
     @Slot(str)
-    def do_return(self, direction_for_log: str):
+    def do_return(self):
         """
         録画終了時などに、「開始位置 (_start_mm) へ戻る」処理。
         """
@@ -946,8 +898,6 @@ class _MotionWorker(QtCore.QObject):
         try:
             if not c._connected or c.device is None:
                 c.sig_error.emit("stop return: not connected")
-                if direction_for_log and c.timing:
-                    c.timing.flush_to_csv(direction_for_log)
                 return
 
             if c.timing:
@@ -974,10 +924,7 @@ class _MotionWorker(QtCore.QObject):
                 if c.timing:
                     c.timing.log_event("RETURN_BEGIN")
                 target = _mkdec(c._start_mm)
-                try:
-                    c.device.MoveTo(target, 60000)
-                except Exception:
-                    c.device.MoveTo(target)
+                c.device.MoveTo(target, 60000)
                 c._current_mm = float(c._start_mm)
                 if c.timing:
                     c.timing.log_event("RETURN_DONE")
@@ -996,12 +943,6 @@ class _MotionWorker(QtCore.QObject):
                     c.device.SetVelocityParams(vp)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed: {ee}")
-
-            try:
-                if direction_for_log and c.timing:
-                    c.timing.flush_to_csv(direction_for_log)
-            except Exception:
-                pass
 
             c._returning = False
 
