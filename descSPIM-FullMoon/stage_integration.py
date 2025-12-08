@@ -10,12 +10,183 @@ import pathlib
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QObject, Signal, Slot, QSettings
 
-from stage_backends.stage_backend_base import IStageBackend
+from stage_backends.stage_backend_base import IStageBackend, StepDirection
 from timing_logger import TimingLogger
 
 from enum import IntEnum
-from stage_backends.stage_backend_base import IStageBackend, StepDirection
-from timing_logger import TimingLogger
+
+"""
+【 1軸（上向き / 下向き / Home / Step / Jog）】
+btn_sample_disconnect
+  → _on_sample_disconnect_clicked()
+  → backend_sample.shutdown()
+
+btn_sample_home
+  → _on_sample_home_clicked()
+  → backend_sample.home()
+
+btn_sample_up2
+  → _on_sample_forward_clicked()
+  → _apply_ctl_profile_to_backend(...)
+  → backend_sample.start_jog(0)
+  → backend_sample.stop_jog()
+
+btn_sample_down2
+  → _on_sample_reverse_clicked()
+  → _apply_ctl_profile_to_backend(...)
+  → backend_sample.start_jog(1)
+  → backend_sample.stop_jog()
+
+btn_sample_up1
+  → _on_step_clicked(1, StepDirection.FORWARD)
+  → _apply_ctl_step_profile_to_backend(...)
+  → backend_sample.step(StepDirection.FORWARD)
+
+btn_sample_down1
+  → _on_step_clicked(1, StepDirection.REVERSE)
+  → _apply_ctl_step_profile_to_backend(...)
+  → backend_sample.step(StepDirection.REVERSE)
+
+btn_sample_preset1
+  → _on_ctl_preset_clicked("Sample", 0)
+
+btn_sample_preset2
+  → _on_ctl_preset_clicked("Sample", 1)
+
+btn_sample_preset3
+  → _on_ctl_preset_clicked("Sample", 2)
+
+btn_sample_preset4
+  → _on_ctl_preset_clicked("Sample", 3)
+
+
+【共通（両軸に関わる移動）】
+
+btn_connect_sample
+  → _on_connect_sample_clicked()
+  → _create_backend_sample_if_needed()
+  → backend_sample.show_setup_dialog(self)
+
+btn_connect_camera
+  → _on_connect_camera_clicked()
+  → _create_backend_camera_if_needed()
+  → backend_camera.show_setup_dialog(self)
+
+btn_settings
+  → _on_settings_clicked()
+  → StageSettingsDialog(...)
+  → dlg.exec()
+  → dlg.get_states()
+  → _apply_profiles_to_backends(reverse=False)
+
+btn_reg
+  → _on_reg_clicked()
+  → backend_sample.register_start_point()
+  → backend_camera.register_start_point()
+
+btn_goto
+  → _on_goto_clicked()
+  → backend_sample.go_to_start_position()
+  → backend_camera.go_to_start_position()
+
+btn_startstop
+  → _on_startstop_clicked()
+    （Move モード）
+      → self._acq_reverse_for_next_start = False
+      → bridge.sig_stage_start.emit()
+      → _on_bridge_stage_start()
+      → _apply_profiles_to_backends(reverse=False)
+      → backend_sample.start_continuous()
+      → backend_camera.start_continuous()
+    （停止時）
+      → bridge.on_stage_stop()
+      → _on_bridge_stage_stop(...)
+      → backend_* .stop_only() / start_return(...) 
+    （Step モード）
+      → _do_acq_step_once(reverse=False)
+      → backend_* .configure_step(step, v_step, acc_step, dir_idx) / apply_move_params(...)
+      → backend_* .step(step_direction)
+
+btn_start_rev
+  → _toggle_reverse()
+    （Move モード開始）
+      → self._acq_reverse_for_next_start = True
+      → bridge.sig_stage_start.emit()
+      → _on_bridge_stage_start()
+      → _apply_profiles_to_backends(reverse=True)
+      → backend_sample.start_continuous()
+      → backend_camera.start_continuous()
+    （Move モード停止）
+      → bridge.on_stage_stop()
+      → _on_bridge_stage_stop(...)
+      → backend_* .stop_only()
+    （Step モード）
+      → _do_acq_step_once(reverse=True)
+      → backend_* .configure_step(step, v_step, acc_step, dir_idx) / apply_move_params(...)
+      → backend_* .step(step_direction)
+
+
+
+【Bridge / 外部からの移動関連】
+
+sig_stage_start
+  → _on_bridge_stage_start()
+  → _apply_profiles_to_backends(reverse=self._acq_reverse_for_next_start)
+  → backend_sample.start_continuous()
+  → backend_camera.start_continuous()
+
+sig_stage_stop(link_mode, stop_mode)
+  → _on_bridge_stage_stop(link_mode, stop_mode)
+  → （test / reverse 実行中）
+       → backend_* .stop_only()
+       → _on_external_stop()
+    （CameraPane からの録画停止など）
+       → backend_* .stop_only() （MOVE_CONTINUOUS のとき）
+       → backend_* .start_return(dir_char) / 
+         （STOP_AND_RETURN のとき）
+
+sig_step_once
+  → _on_bridge_step_once()
+  → _do_acq_step_once(reverse=False)
+  → backend_* .configure_step(step, v_step, acc_step, dir_idx) / apply_move_params(...)
+  → backend_* .step(step_direction)
+
+sig_recording_state(recording)
+  → _on_recording_state_changed(recording)
+
+  
+【backend → StagePanel】
+
+backend_sample.sig_status(msg)
+  → _on_sample_status(msg)
+
+backend_sample.sig_error(msg)
+  → lbl_sample_status.setText("[Sample ERROR] " + msg)
+
+backend_sample.sig_connected(connected)
+  → _on_sample_connected_changed(connected)
+
+backend_sample.sig_supported_products(products)
+  → _on_products_listed(1, products)
+
+backend_sample.sig_startpos_updated(pos_mm)
+  → _on_startpos_sample_updated(pos_mm)
+
+backend_camera.sig_status(msg)
+  → _on_camera_status(msg)
+
+backend_camera.sig_error(msg)
+  → lbl_camera_status.setText("[Camera ERROR] " + msg)
+
+backend_camera.sig_connected(connected)
+  → _on_camera_connected_changed(connected)
+
+backend_camera.sig_supported_products(products)
+  → _on_products_listed(2, products)
+
+backend_camera.sig_startpos_updated(pos_mm)
+  → _on_startpos_camera_updated(pos_mm)
+"""
 
 
 # stage_backends ディレクトリ
@@ -197,17 +368,11 @@ class StageLinkMode(IntEnum):
     STAGE_OFF       = 0
     MOVE_CONTINUOUS = 1
     STEP            = 2
-    # 将来: MULTI_POSITION = 2 などを追加していく
-    # TODO: OFF のときは Auto-return を強制 OFF + 無効化 にするようにコードを編集すること
+    # 将来: MULTI_POSITION などを追加する
 
 class StageStopMode(IntEnum):
     STOP_ONLY = 0         # 止めるだけ
     STOP_AND_RETURN = 1   # Home/Return 付き
-    #RETURN_ONLY = 2
-
-#class StepDirection(IntEnum):
-#    FORWARD = 0
-#    REVERSE = 1
 
 class StageBridge(QObject):
     """
@@ -216,25 +381,23 @@ class StageBridge(QObject):
     - sig_stage_start:
         Move 連動開始（連続走査）
 
-    - sig_stage_stop(direction, mode):
+    - sig_stage_stop(link_mode, stop_mode):
         連動停止指令 + 停止モード
-        direction: str  ("F" / "R" / "" など)
-        mode     : int (StageStopMode の value)
+        link_mode: StageLinkMode の value
+        stop_mode: StageStopMode の value
 
-    - sig_step_once(reverse):
-        Step 連動用の 1 ステップ要求
-        reverse: bool
+    - sig_step_once:
+        Step 連動用の 1 ステップ要求（フレームごと）
 
     - sig_recording_state:
         カメラ録画状態の通知（UI 色付け用）
     """
 
-    sig_stage_start = Signal()            # 録画連動の開始（Move）
-    sig_stage_stop = Signal(int, int)     
-    sig_step_done = Signal()             # 使う場合のために残しておく
+    sig_stage_start = Signal()
+    sig_stage_stop = Signal(int, int)
+    sig_step_done = Signal()
     sig_recording_state = Signal(bool)
     sig_step_once = Signal()
-    sig_step_done = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -248,20 +411,25 @@ class StageBridge(QObject):
         """
         CameraPane 側から「ステージ連動モード／停止モード」を設定する。
 
-        link_mode : CameraPane 独自の StageLinkMode（0=Move, 1=Step など）
+        link_mode : CameraPane 独自の StageLinkMode（0=OFF, 1=Move, 2=Step）
         stop_mode : StageStopMode の value
         """
         print(f"[StageBridge] set_link_config: mode={link_mode}, stop_mode={stop_mode}")
-        self._link_mode = StageLinkMode(int(link_mode))
-        self._stop_mode = StageStopMode(int(stop_mode))
+        try:
+            self._link_mode = StageLinkMode(int(link_mode))
+        except ValueError:
+            self._link_mode = StageLinkMode.STAGE_OFF
 
         try:
-            self.stop_mode = StageStopMode(int(stop_mode))
+            self._stop_mode = StageStopMode(int(stop_mode))
         except ValueError:
-            self.stop_mode = StageStopMode.STOP_ONLY
+            self._stop_mode = StageStopMode.STOP_ONLY
 
     @Slot()
     def on_stage_stop(self):
+        """
+        CameraPane / StagePanel からの「停止」要求を統一的に送る。
+        """
         try:
             print(f"[StageBridge] on_stage_stop: link_mode={self._link_mode} stop_mode={self._stop_mode}")
             self.sig_stage_stop.emit(int(self._link_mode), int(self._stop_mode))
@@ -414,7 +582,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
             lbl_dir.hide()
             cmb_dir.hide()
 
-
         # Preset
         lbl_preset = QtWidgets.QLabel("Preset:", gb)
         edit_name = QtWidgets.QLineEdit(gb)
@@ -471,7 +638,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
             lambda item, a=axis, k=kind: self._on_recent_clicked(a, k, item)
         )
 
-
     # ---- state <-> UI ----
     def _load_state_into_editors(self):
         for axis, kind in [("Sample", "Acq"),
@@ -506,7 +672,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
             for r in recents:
                 lst.addItem(self._format_recent_text(r))
 
-
     def _save_editors_into_state(self):
         for axis, kind in [("Sample", "Acq"),
                            ("Camera", "Acq"),
@@ -534,9 +699,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
                 state.ctl_profile = prof
                 self._append_recent(state.ctl_recent, prof)
 
-
-
-
     # ---- preset / recent handlers ----
     def _get_state_for(self, axis: str) -> AxisState:
         return self.sample_state if axis == "Sample" else self.camera_state
@@ -554,7 +716,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
             f"Move v={p.v_move:.3f} acc={p.acc_move:.1f}; "
             f"Step s={p.step:.4f} v={p.v_step:.3f} acc={p.acc_step:.1f} {p.dir}"
         )
-
 
     def _on_load_preset(self, axis: str, kind: str, idx: int):
         state = self._get_state_for(axis)
@@ -599,7 +760,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
             # ★ Ctl 側は Forward 固定
             prof.dir = "F"
 
-
         preset = StagePreset(name=name, profile=prof)
         if kind == "Acq":
             state.acq_presets.append(preset)
@@ -618,8 +778,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
         lst.clear()
         for r in rec_list:
             lst.addItem(self._format_recent_text(r))
-
-
 
     def _on_manage_presets(self, axis: str, kind: str):
         """
@@ -709,9 +867,6 @@ class StageSettingsDialog(QtWidgets.QDialog):
         if kind == "Acq":
             ed["dir"].setCurrentIndex(0 if p.dir == "F" else 1)
 
-
-
-
     # ---- accept ----
     def _on_accept(self):
         self._save_editors_into_state()
@@ -796,14 +951,8 @@ class StagePanel(QtWidgets.QGroupBox):
         self._test_running = False
         self._fwd_running = False
         self._rev_running = False
-        self._prev_acq_dirs: Optional[Tuple[str, str]] = None  # (sample_dir, camera_dir)
-
-        # Step モード用: Start(test) 連続ステップ用タイマー
-        #self._step_test_timer = QtCore.QTimer(self)
-        #self._step_test_timer.setInterval(100)  # 必要なら適宜 ms に変更
-        #self._step_test_timer.timeout.connect(self._on_step_test_tick)
-        # Step 連続テストの方向 ("none" / "test" / "reverse")
-        #self._step_owner: str = "none"
+        #self._prev_acq_dirs: Optional[Tuple[str, str]] = None  # (sample_dir, camera_dir)
+        self._acq_reverse_for_next_start: bool = False
 
         # 個別 Jog 状態
         self._sample_jog_running = False
@@ -1044,19 +1193,11 @@ class StagePanel(QtWidgets.QGroupBox):
         self.btn_camera_up2.clicked.connect(self._on_camera_forward_clicked)
         self.btn_camera_down2.clicked.connect(self._on_camera_reverse_clicked)
 
-        """
-        self.btn_sample_up1.clicked.connect(lambda: self._on_step_clicked(1, +1))
-        self.btn_sample_down1.clicked.connect(lambda: self._on_step_clicked(1, -1))
-        self.btn_camera_up1.clicked.connect(lambda: self._on_step_clicked(2, +1))
-        self.btn_camera_down1.clicked.connect(lambda: self._on_step_clicked(2, -1))
-        """
-
         self.btn_sample_up1.clicked.connect(lambda: self._on_step_clicked(1, StepDirection.FORWARD))
         self.btn_sample_down1.clicked.connect(lambda: self._on_step_clicked(1, StepDirection.REVERSE))
         self.btn_camera_up1.clicked.connect(lambda: self._on_step_clicked(2, StepDirection.FORWARD))
         self.btn_camera_down1.clicked.connect(lambda: self._on_step_clicked(2, StepDirection.REVERSE))
 
-        
         self.btn_sample_home.clicked.connect(self._on_sample_home_clicked)
         self.btn_camera_home.clicked.connect(self._on_camera_home_clicked)
 
@@ -1076,22 +1217,6 @@ class StagePanel(QtWidgets.QGroupBox):
         self.btn_camera_preset2.clicked.connect(lambda: self._on_ctl_preset_clicked("Camera", 1))
         self.btn_camera_preset3.clicked.connect(lambda: self._on_ctl_preset_clicked("Camera", 2))
         self.btn_camera_preset4.clicked.connect(lambda: self._on_ctl_preset_clicked("Camera", 3))
-
-        # Bridge からの stop に対して UI を同期
-        #self.bridge.sig_stage_stop_only.connect(self._on_external_stop)
-        # stop_return のときは _on_bridge_stage_stop_return 内で _on_external_stop を呼ぶ
-
-        # Bridge → backend 呼び出し
-        #self.bridge.sig_stage_start.connect(self._on_bridge_stage_start)
-        #self.bridge.sig_stage_stop_only.connect(self._on_bridge_stage_stop_only)
-        #self.bridge.sig_stage_stop_return.connect(self._on_bridge_stage_stop_return)
-
-        # Bridge からの stop に対して UI を同期
-        #self.bridge.sig_stage_stop.connect(self._on_external_stop)
-
-        # Bridge → backend 呼び出し
-        #self.bridge.sig_stage_start.connect(self._on_bridge_stage_start)
-        #self.bridge.sig_stage_stop.connect(self._on_bridge_stage_stop)
 
         # Bridge → backend 呼び出し／UI 同期
         self.bridge.sig_stage_start.connect(self._on_bridge_stage_start)
@@ -1127,13 +1252,6 @@ class StagePanel(QtWidgets.QGroupBox):
         self.lbl_camera_status.setText(f"[Camera] {msg}")
 
     # ---------------- UI summary helpers ----------------
-    #def _format_profile_summary(self, label: str, prof: StageProfile) -> str:
-    #    return (
-    #        f"{label}: "
-    #        f"Move v={prof.v_move:.3f} acc={prof.acc_move:.1f}; "
-    #        f"Step s={prof.step:.4f} v={prof.v_step:.3f} acc={prof.acc_step:.1f} {prof.dir}"
-    #    )
-
     def _update_axis_summary_labels(self):
         # Sample
         self.lbl_sample_acq.setText(
@@ -1451,6 +1569,7 @@ class StagePanel(QtWidgets.QGroupBox):
         → backend.axis_name を "Sample" にして show_setup_dialog() を呼ぶ
         （ダイアログ内で serial 入力〜接続〜device 選択まで完結）
         """
+        print("[StagePanel] _on_connect_sample_clicked: pressed")
         if not self._create_backend_sample_if_needed():
             self._set_sample_status("ERROR: cannot create Sample backend")
             return
@@ -1684,50 +1803,6 @@ class StagePanel(QtWidgets.QGroupBox):
             self.btn_camera_down2.setText("↓↓")
             self.btn_camera_down2.setStyleSheet("")
             self.btn_camera_up2.setEnabled(True)
-    """
-    def _on_step_clicked(self, dev_index: int, direction_sign: int):
-        if not self._connected:
-            self._set_stage_status("ERROR: not connected")
-            return
-
-        # recording 中は Step 禁止
-        if self._recording_active:
-            self._set_stage_status("ERROR: recording - cannot step")
-            return
-
-        # Start(test) / Reverse 実行中は Step 禁止
-        if self._test_running or self._rev_running:
-            self._set_stage_status("ERROR: test running - cannot step")
-            return
-
-        # Jog 中も Step 禁止（Jog < Step のため、先に Jog を止めさせる）
-        if dev_index == 1 and self._sample_jog_running:
-            self._set_sample_status("ERROR: Sample jog running - stop jog first")
-            return
-        if dev_index == 2 and self._camera_jog_running:
-            self._set_camera_status("ERROR: Camera jog running - stop jog first")
-            return
-
-        try:
-            if dev_index == 1:
-                if self.backend_sample and self._connected_sample:
-                    self._apply_ctl_step_profile_to_backend(
-                        self.sample_state, self.backend_sample, self._connected_sample
-                    )
-                    self.backend_sample.step(direction_sign)
-                else:
-                    self._set_sample_status("ERROR: Sample not connected")
-            else:
-                if self.backend_camera and self._connected_camera:
-                    self._apply_ctl_step_profile_to_backend(
-                        self.camera_state, self.backend_camera, self._connected_camera
-                    )
-                    self.backend_camera.step(direction_sign)
-                else:
-                    self._set_camera_status("ERROR: Camera not connected")
-        except Exception as e:
-            self._set_stage_status(f"ERROR: step({dev_index}): {e}")
-    """
 
     def _on_step_clicked(self, dev_index: int, direction: StepDirection):
         if not self._connected:
@@ -1739,7 +1814,7 @@ class StagePanel(QtWidgets.QGroupBox):
             self._set_stage_status("ERROR: recording - cannot step")
             return
 
-        # Start(test) / Reverse 実行中は Step 禁止
+        # Start(test) / Opposite 実行中は Step 禁止
         if self._test_running or self._rev_running:
             self._set_stage_status("ERROR: test running - cannot step")
             return
@@ -1772,45 +1847,6 @@ class StagePanel(QtWidgets.QGroupBox):
         except Exception as e:
             self._set_stage_status(f"ERROR: step({dev_index}): {e}")
 
-    """
-    def _do_acq_step_once(self, reverse: bool = False):
-        
-        #Acq Profile (mode=Step) に基づいて、
-        #接続されている軸を 1 回だけステップさせる。
-        #reverse=True の場合は Acq.dir と逆向きに動かす。
-        
-        #if not (
-        #    self.sample_state.acq_profile.mode == "Step" and self.camera_state.acq_profile.mode == "Step"):
-        #    self._set_stage_status("ERROR: both axes must be Step mode for Step test")
-        #    return
-
-        def _step_axis(axis_state: AxisState,
-                    backend: Optional[IStageBackend],
-                    connected: bool):
-            if not (backend and connected):
-                return
-            p = axis_state.acq_profile
-            #if p.mode != "Step":
-            #    return
-
-            # dir を必要なら反転
-            dir_char = p.dir
-            if reverse:
-                dir_char = "R" if dir_char == "F" else "F"
-
-            dir_idx = 0 if dir_char == "F" else 1
-            sign = +1 if dir_char == "F" else -1
-
-            if hasattr(backend, "configure_step"):
-                backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
-            else:
-                backend.apply_params(p.v_step, p.acc_step, dir_idx)
-
-            backend.step(sign)
-
-        _step_axis(self.sample_state, self.backend_sample, self._connected_sample)
-        _step_axis(self.camera_state, self.backend_camera, self._connected_camera)
-    """
     def _do_acq_step_once(self, reverse: bool = False):
         """
         Acq Profile (mode=Step) に基づいて、
@@ -1838,129 +1874,49 @@ class StagePanel(QtWidgets.QGroupBox):
                 step_dir = StepDirection.REVERSE
                 dir_idx = 1
 
-            if hasattr(backend, "configure_step"):
-                backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
-            else:
-                backend.apply_params(p.v_step, p.acc_step, dir_idx)
-
+            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
+            backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
             backend.step(step_dir)
 
         _step_axis(self.sample_state, self.backend_sample, self._connected_sample)
-        _step_axis(self.camera_state, self.backend_camera, self._connected_camera)
+        _step_axis(self.camera_state, self.backend_camera, self._connected_camera)        
 
-
-    """# Step
-    def _start_step_test(self):
-        #Acq Step モードでの連続ステップ開始（Start(test) 用・正方向）
-        if self._test_running:
-            # すでに Step 連続動作中（Forward/Reverse いずれか）なら何もしない
-            return
-
-        self._step_owner = "test"
-        self._test_running = True
-
-        # ボタン表示を整える
-        self.btn_startstop.setText("Stop (test)")
-        self.btn_startstop.setStyleSheet(self._style_running_red)
-        self.btn_start_rev.setText("Start (Opposite)")
-        self.btn_start_rev.setStyleSheet("")
-
-        # 1 回目はすぐ実行
-        self._on_step_test_tick()
-        # 以降はタイマーで連続ステップ
-        if not self._step_test_timer.isActive():
-            self._step_test_timer.start()
-
-    # Step
     def _stop_step_test(self):
-        #Acq Step モードでの連続ステップ停止（Forward/Reverse 共通）
-        if self._step_test_timer.isActive():
-            self._step_test_timer.stop()
-
+        """
+        Acq Step モード用の連続ステップ停止（今は UI フラグとボタンだけ戻す）
+        """
         if self._test_running:
             self._test_running = False
 
-        self._step_owner = "none"
-
-        # 両ボタンをデフォルト状態に戻す
-        self.btn_startstop.setText("Start (test)")
-        self.btn_startstop.setStyleSheet("")
-        self.btn_start_rev.setText("Start (Opposite)")
-        self.btn_start_rev.setStyleSheet("")
-    """
-    """
-    def _start_step_test(self):
-        #Acq Step モードでの連続ステップ開始（Start(test) 用・正方向）
-        if self._test_running:
-            # すでに Step 連続動作中（Forward/Reverse いずれか）なら何もしない
-            return
-
-        self._step_owner = "test"
-        self._test_running = True
-
-        # ボタン表示を整える
-        self.btn_startstop.setText("Stop (test)")
-        self.btn_startstop.setStyleSheet(self._style_running_red)
-        self.btn_start_rev.setText("Start (Opposite)")
-        self.btn_start_rev.setStyleSheet("")
-
-        # 1 回目はすぐ実行
-        self._on_step_test_tick()
-        # 以降はタイマーで連続ステップ
-        if not self._step_test_timer.isActive():
-            self._step_test_timer.start()
-
-
-    def _stop_step_test(self):
-        #Acq Step モードでの連続ステップ停止（Forward/Reverse 共通）
-        if self._step_test_timer.isActive():
-            self._step_test_timer.stop()
-
-        if self._test_running:
-            self._test_running = False
-
-        self._step_owner = "none"
-
-        # 両ボタンをデフォルト状態に戻す
         self.btn_startstop.setText("Start (test)")
         self.btn_startstop.setStyleSheet("")
         self.btn_start_rev.setText("Start (Opposite)")
         self.btn_start_rev.setStyleSheet("")
 
-    
-    # Step
-    def _on_step_test_tick(self):
-        #Step モード連続テスト用タイマーから呼ばれる（Forward / Reverse 共通）
-        # オーナーと状態が不正なら終了
-        if (not self._test_running) or self._step_owner not in ("test", "reverse"):
-            self._stop_step_test()
-            return
-
-        try:
-            reverse = (self._step_owner == "reverse")
-            self._do_acq_step_once(reverse=reverse)
-        except Exception as e:
-            self._set_stage_status(f"ERROR: Step test: {e}")
-            self._stop_step_test()
-    """        
-
-    def _stop_step_test(self):
-        #Acq Step モードでの連続ステップ停止（Forward/Reverse 共通）
-        if self._test_running:
-            self._test_running = False
-        # 両ボタンをデフォルト状態に戻す
-        self.btn_startstop.setText("Start (test)")
-        self.btn_startstop.setStyleSheet("")
-        self.btn_start_rev.setText("Start (Opposite)")
-        self.btn_start_rev.setStyleSheet("")
-
-    # Start(test) for Move & Step
     @Slot()
     def _on_startstop_clicked(self):
-        ...
+        if not self._connected:
+            self._set_stage_status("ERROR: not connected")
+            return
+
         s_mode = self.sample_state.acq_profile.mode
         c_mode = self.camera_state.acq_profile.mode
-        ...
+
+        # recording 中はテスト禁止
+        if self._recording_active:
+            self._set_stage_status("ERROR: recording - cannot Start(test)")
+            return
+
+        # Jog 中はテスト禁止
+        if self._sample_jog_running or self._camera_jog_running:
+            self._set_stage_status("ERROR: jog running - stop jog first")
+            return
+
+        # Reverse 走査中も禁止
+        if self._rev_running:
+            self._set_stage_status("ERROR: Reverse running - stop it first")
+            return
+
         # --- Step モード: 両軸 Step のときだけ「1 回ステップ」 ---
         if s_mode == "Step" or c_mode == "Step":
             if not (s_mode == "Step" and c_mode == "Step"):
@@ -1980,227 +1936,29 @@ class StagePanel(QtWidgets.QGroupBox):
         # --- Move モード: 従来どおり連続走査（Bridge 経由） ---
         else:
             if not self._test_running:
-                self._apply_profiles_to_backends()
+                # 正方向（reverse=False）で Move プロファイルを適用
+                self._acq_reverse_for_next_start = False
+                #self._apply_profiles_to_backends(reverse=False)
                 self.bridge.sig_stage_start.emit()
                 self._test_running = True
                 self.btn_startstop.setText("Stop (test)")
                 self.btn_startstop.setStyleSheet(self._style_running_red)
             else:
-                #self.bridge.sig_stage_stop.emit(int(StageStopMode.STOP_ONLY))
+                # link_mode / stop_mode に基づいて停止
                 self.bridge.on_stage_stop()
                 self._test_running = False
                 self.btn_startstop.setText("Start (test)")
                 self.btn_startstop.setStyleSheet("")
 
-        """
-    # Start(tset) for Move & Step
-    @Slot()
-    def _on_startstop_clicked(self):
-        if not self._connected:
-            self._set_stage_status("ERROR: not connected")
-            return
-
-        s_mode = self.sample_state.acq_profile.mode
-        c_mode = self.camera_state.acq_profile.mode
-
-        # ---- Recording 中はテスト禁止（優先度: recording > Move/Step/Jog）----
-        if self._recording_active:
-            self._set_stage_status("ERROR: recording - cannot Start(test)")
-            return
-
-        # ---- Jog 中はテスト禁止（Jog < Step/Move）----
-        if self._sample_jog_running or self._camera_jog_running:
-            self._set_stage_status("ERROR: jog running - stop jog first")
-            return
-
-        # ---- Reverse 走査中も禁止 ----
-        if self._rev_running:
-            self._set_stage_status("ERROR: Reverse running - stop it first")
-            return
-
-        # --- Step モード: 連続ステップのトグル ---
-
-        if s_mode == "Step" or c_mode == "Step":
-            if not (s_mode == "Step" and c_mode == "Step"):
-                self._set_stage_status("ERROR: Start(test) in Step mode requires both axes = Step")
-                return
-
-            # トグル動作
-            if not self._test_running:
-                self._apply_profiles_to_backends()  # いらない？どこかで適用してる？
-                self._start_step_test() # Start(test)ではカメラからのシグナルがないから
-                self._test_running = True
-                self.btn_startstop.setText("Stop (test)")
-                self.btn_startstop.setStyleSheet(self._style_running_red)
-            else:
-                self._stop_step_test()  # Start(test)ではカメラからのシグナルがないから
-                self._test_running = False
-                self.btn_startstop.setText("Start (test)")
-                self.btn_startstop.setStyleSheet("")
-            return
-
-        if s_mode == "Step" or c_mode == "Step":
-            if not (s_mode == "Step" and c_mode == "Step"):
-                self._set_stage_status(
-                    "ERROR: Start(test) in Step mode requires both axes = Step"
-                )
-                return
-
-            # トグル動作
-            if not self._test_running:
-                self._apply_profiles_to_backends()
-                self._start_step_test()   # ← これだけで OK（内部でフラグとボタン更新）
-            else:
-                self._stop_step_test()    # ← これだけで OK
-            return
-
-        # --- Move モード: 従来どおり連続走査（Bridge 経由） ---
-        else:
-            if not self._test_running:
-                self._apply_profiles_to_backends()
-                self.bridge.sig_stage_start.emit()  # Start recording と Start(test) が同じ動き
-                self._test_running = True
-                self.btn_startstop.setText("Stop (test)")
-                self.btn_startstop.setStyleSheet(self._style_running_red)
-            else:
-                # StagePanel からのテスト停止は「STOP_ONLY / direction 無し」で送る
-                self.bridge.sig_stage_stop.emit(int(StageStopMode.STOP_ONLY))
-                self._test_running = False
-                self.btn_startstop.setText("Start (test)")
-                self.btn_startstop.setStyleSheet("")
-            """
-    """
-    def _do_step_test(self):
-        # Acq mode が Step の軸について、
-        # Acq の Step パラメータで 1 ステップだけ動かす簡易テスト。
-        # Start(test) ボタンはトグルにはせず、一発動作だけ。
-        moved = False
-        try:
-            # Sample 軸
-            if (
-                self.backend_sample
-                and self._connected_sample
-                and self.sample_state.acq_profile.mode == "Step"
-            ):
-                self._apply_acq_step_profile_to_backend(
-                    self.sample_state, self.backend_sample, True
-                )
-                sign = +1 if self.sample_state.acq_profile.dir == "F" else -1
-                self.backend_sample.step(sign)
-                moved = True
-
-            # Camera 軸
-            if (
-                self.backend_camera
-                and self._connected_camera
-                and self.camera_state.acq_profile.mode == "Step"
-            ):
-                self._apply_acq_step_profile_to_backend(
-                    self.camera_state, self.backend_camera, True
-                )
-                sign = +1 if self.camera_state.acq_profile.dir == "F" else -1
-                self.backend_camera.step(sign)
-                moved = True
-
-        except Exception as e:
-            self._set_stage_status(f"ERROR: step test: {e}")
-            return
-
-        if not moved:
-            self._set_stage_status("Step mode の軸がありません（Acq mode が Move のみ）")
-        else:
-            self._set_stage_status("Step test executed (Acq Step)")
-
-    """
-    """
-    def _toggle_forward(self):
-        #Start/Stop toggle for Forward (Acq の dir を一時的に F にして走査)
-        if not self._connected:
-            self._set_stage_status("ERROR: not connected")
-            return
-
-        if self._test_running:
-            self._set_stage_status("ERROR: test running - cannot start forward")
-            return
-        if self._rev_running:
-            self._set_stage_status("ERROR: Reverse running - stop it first")
-            return
-
-        if not self._fwd_running:
-            # dir を一時的に F にして走査
-            self._prev_acq_dirs = (self.sample_state.acq_profile.dir,
-                                   self.camera_state.acq_profile.dir)
-            self.sample_state.acq_profile.dir = "F"
-            self.camera_state.acq_profile.dir = "F"
-            self._apply_profiles_to_backends()
-            self.bridge.sig_stage_start.emit()
-            self._fwd_running = True
-            #self.btn_start_fwd.setText("Stop (Forward)")
-            #self.btn_start_fwd.setStyleSheet(self._style_running_red)
-            self._set_stage_status("Started (Forward)")
-        else:
-            self.bridge.sig_stage_stop_only.emit()
-            self._fwd_running = False
-            #self.btn_start_fwd.setText("Start (Forward)")
-            #self.btn_start_fwd.setStyleSheet("")
-
-            # dir を元に戻す
-            if self._prev_acq_dirs is not None:
-                s_dir, c_dir = self._prev_acq_dirs
-                self.sample_state.acq_profile.dir = s_dir
-                self.camera_state.acq_profile.dir = c_dir
-                self._apply_profiles_to_backends()
-                self._prev_acq_dirs = None
-
-            self._set_stage_status("Stopped (Forward)")
-
     def _toggle_reverse(self):
-        # Start/Stop toggle for Reverse (Acq の dir を一時的に R にして走査)
-        if not self._connected:
-            self._set_stage_status("ERROR: not connected")
-            return
-
-        if self._test_running:
-            self._set_stage_status("ERROR: test running - cannot start reverse")
-            return
-        if self._fwd_running:
-            self._set_stage_status("ERROR: Forward running - stop it first")
-            return
-
-        if not self._rev_running:
-            self._prev_acq_dirs = (self.sample_state.acq_profile.dir,
-                                   self.camera_state.acq_profile.dir)
-            self.sample_state.acq_profile.dir = "R"
-            self.camera_state.acq_profile.dir = "R"
-            self._apply_profiles_to_backends()
-            self.bridge.sig_stage_start.emit()
-            self._rev_running = True
-            self.btn_start_rev.setText("Stop (Reverse)")
-            self.btn_start_rev.setStyleSheet(self._style_running_red)
-            self._set_stage_status("Started (Reverse)")
-        else:
-            self.bridge.sig_stage_stop_only.emit()
-            self._rev_running = False
-            self.btn_start_rev.setText("Start (Reverse)")
-            self.btn_start_rev.setStyleSheet("")
-
-            if self._prev_acq_dirs is not None:
-                s_dir, c_dir = self._prev_acq_dirs
-                self.sample_state.acq_profile.dir = s_dir
-                self.camera_state.acq_profile.dir = c_dir
-                self._apply_profiles_to_backends()
-                self._prev_acq_dirs = None
-
-            self._set_stage_status("Stopped (Reverse)")
         """
+        Start/Stop toggle for Opposite.
 
-    def _toggle_reverse(self):
-        #Start/Stop toggle for Reverse
-        #Move モード:Acq.dir を一時的に反転させて連続走査。
-        #Step モード:
-        #    Start(test) の逆向きに連続ステップ。
-        #    （Acq.dir が F なら R 方向へ連続、R なら F 方向へ連続）
-
+        Move モード:
+            Acq.dir は書き換えず、reverse=True で連続走査。
+        Step モード:
+            Start(test) の逆向きに 1 回だけステップ。
+        """
         if not self._connected:
             self._set_stage_status("ERROR: not connected")
             return
@@ -2209,7 +1967,7 @@ class StagePanel(QtWidgets.QGroupBox):
         if self._recording_active:
             self._set_stage_status("ERROR: recording - cannot start reverse")
             return
-    
+
         s_mode = self.sample_state.acq_profile.mode
         c_mode = self.camera_state.acq_profile.mode
 
@@ -2222,48 +1980,31 @@ class StagePanel(QtWidgets.QGroupBox):
                 return
 
             try:
-                # 逆方向に 1 回だけステップ
                 self._do_acq_step_once(reverse=True)
                 self._set_stage_status("Step opposite: 1 step")
             except Exception as e:
                 self._set_stage_status(f"ERROR: Start(Opposite) Step: {e}")
             return
 
-        # --- Move モード: これまで通りの「反転走査」 ---
+        # --- Move モード: reverse フラグでの反転走査 ---
         if self._test_running:
             self._set_stage_status("ERROR: test running - cannot start reverse")
             return
+
         if self._rev_running:
             # 停止
-            #self.bridge.sig_stage_stop_only.emit()
-            #self.bridge.sig_stage_stop.emit(int(StageStopMode.STOP_ONLY))
             self.bridge.on_stage_stop()
             self._rev_running = False
             self.btn_start_rev.setText("Start (Opposite)")
             self.btn_start_rev.setStyleSheet("")
-
-            if self._prev_acq_dirs is not None:
-                s_dir, c_dir = self._prev_acq_dirs
-                self.sample_state.acq_profile.dir = s_dir
-                self.camera_state.acq_profile.dir = c_dir
-                self._apply_profiles_to_backends()
-                self._prev_acq_dirs = None
-
             self._set_stage_status("Stopped (Opposite)")
             return
 
         # 開始（Move のときだけここに来る）
-        s_dir_orig = self.sample_state.acq_profile.dir
-        c_dir_orig = self.camera_state.acq_profile.dir
-        self._prev_acq_dirs = (s_dir_orig, c_dir_orig)
-
-        def flip(d: str) -> str:
-            return "R" if d == "F" else "F"
-
-        self.sample_state.acq_profile.dir = flip(s_dir_orig)
-        self.camera_state.acq_profile.dir = flip(c_dir_orig)
-
-        self._apply_profiles_to_backends()
+        # プロファイルの dir は変更せず、reverse=True で適用
+        self._acq_reverse_for_next_start = True
+        # ここで一度適用してもよいが、_on_bridge_stage_start に任せるなら消してよい
+        #self._apply_profiles_to_backends(reverse=True)
         self.bridge.sig_stage_start.emit()
 
         self._rev_running = True
@@ -2271,130 +2012,28 @@ class StagePanel(QtWidgets.QGroupBox):
         self.btn_start_rev.setStyleSheet(self._style_running_red)
         self._set_stage_status("Started (Reverse)")
 
-
-    """
-    def _toggle_reverse(self):
-
-        #Start/Stop toggle for Reverse
-        #Move モード:Acq.dir を一時的に反転させて連続走査。
-        #Step モード:
-            Start(test) の逆向きに連続ステップ。
-            （Acq.dir が F なら R 方向へ連続、R なら F 方向へ連続）
-
-        if not self._connected:
-            self._set_stage_status("ERROR: not connected")
-            return
-
-        # recording 中は Reverse 禁止
-        if self._recording_active:
-            self._set_stage_status("ERROR: recording - cannot start reverse")
-            return
-
-        s_mode = self.sample_state.acq_profile.mode
-        c_mode = self.camera_state.acq_profile.mode
-
-        # Jog 中は Reverse 禁止
-        if self._sample_jog_running or self._camera_jog_running:
-            self._set_stage_status("ERROR: jog running - stop jog first")
-            return
-
-        # --- Step モード: 連続ステップ（Start(test) の逆向き）---
-        if s_mode == "Step" or c_mode == "Step":
-            if not (s_mode == "Step" and c_mode == "Step"):
-                self._set_stage_status(
-                    "ERROR: Start(Opposite) in Step mode requires both axes = Step"
-                )
-                return
-
-            # まだ Step 連続動作していない → 逆向き連続スタート
-            if not self._test_running:
-                self._step_owner = "reverse"
-                self._test_running = True
-
-                # ボタン表示（Opposite 側を赤、test 側はデフォルト）
-                self.btn_start_rev.setText("Stop (Opposite)")
-                self.btn_start_rev.setStyleSheet(self._style_running_red)
-                self.btn_startstop.setText("Start (test)")
-                self.btn_startstop.setStyleSheet("")
-
-                # 1 回目を即時実行
-                self._on_step_test_tick()
-                if not self._step_test_timer.isActive():
-                    self._step_test_timer.start()
-                return
-
-            # すでに Step 連続中
-            if self._step_owner == "reverse":
-                # 自分がオーナーならトグル停止
-                self._stop_step_test()
-                return
-            else:
-                # Forward 実行中はエラー
-                self._set_stage_status(
-                    "ERROR: Step test (Forward) running - stop it first"
-                )
-                return
-
-        # --- Move モード: これまで通りの「反転走査」 ---
-        if self._test_running:
-            self._set_stage_status("ERROR: test running - cannot start reverse")
-            return
-        if self._rev_running:
-            # 停止
-            #self.bridge.sig_stage_stop_only.emit()
-            self.bridge.sig_stage_stop.emit(int(StageStopMode.STOP_ONLY))
-            self._rev_running = False
-            self.btn_start_rev.setText("Start (Opposite)")
-            self.btn_start_rev.setStyleSheet("")
-
-            if self._prev_acq_dirs is not None:
-                s_dir, c_dir = self._prev_acq_dirs
-                self.sample_state.acq_profile.dir = s_dir
-                self.camera_state.acq_profile.dir = c_dir
-                self._apply_profiles_to_backends()
-                self._prev_acq_dirs = None
-
-            self._set_stage_status("Stopped (Opposite)")
-            return
-
-        # 開始（Move のときだけここに来る）
-        s_dir_orig = self.sample_state.acq_profile.dir
-        c_dir_orig = self.camera_state.acq_profile.dir
-        self._prev_acq_dirs = (s_dir_orig, c_dir_orig)
-
-        def flip(d: str) -> str:
-            return "R" if d == "F" else "F"
-
-        self.sample_state.acq_profile.dir = flip(s_dir_orig)
-        self.camera_state.acq_profile.dir = flip(c_dir_orig)
-
-        self._apply_profiles_to_backends()
-        self.bridge.sig_stage_start.emit()
-
-        self._rev_running = True
-        self.btn_start_rev.setText("Stop (Reverse)")
-        self.btn_start_rev.setStyleSheet(self._style_running_red)
-        self._set_stage_status("Started (Reverse)")
-        """
-    
     @Slot()
     def _on_external_stop(self):
         """外部（camera 等）から stop が来たときに UI 状態をクリアする"""
+        # Reverse 状態
         if self._rev_running:
             self._rev_running = False
             self.btn_start_rev.setText("Start (Opposite)")
             self.btn_start_rev.setStyleSheet("")
 
-        if self._prev_acq_dirs is not None:
-            s_dir, c_dir = self._prev_acq_dirs
-            self.sample_state.acq_profile.dir = s_dir
-            self.camera_state.acq_profile.dir = c_dir
-            self._apply_profiles_to_backends()
-            self._prev_acq_dirs = None
+        # Start(test) 状態
+        if self._test_running:
+            self._test_running = False
+            self.btn_startstop.setText("Start (test)")
+            self.btn_startstop.setStyleSheet("")
 
-        # 現在モードが Step のときだけ Step 用ループを止める
-        if (self.sample_state.acq_profile.mode == "Step"
-            or self.camera_state.acq_profile.mode == "Step"):
+        # dir はプロファイル上は常に不変なので、ここでの復元処理は不要
+
+        # 現在モードが Step のときだけ Step 用 UI を止める
+        if (
+            self.sample_state.acq_profile.mode == "Step"
+            or self.camera_state.acq_profile.mode == "Step"
+        ):
             self._stop_step_test()
 
 
@@ -2427,20 +2066,37 @@ class StagePanel(QtWidgets.QGroupBox):
         self._update_axis_summary_labels()
 
     # ---------------- Bridge → backend ラッパ ----------------
-    def _apply_acq_profile_to_backend(self, axis_state: AxisState,
-                                      backend: Optional[IStageBackend],
-                                      connected: bool):
+    def _apply_acq_profile_to_backend(
+        self,
+        axis_state: AxisState,
+        backend: Optional[IStageBackend],
+        connected: bool,
+        reverse: bool = False,
+    ):
+        """
+        Acq: Move モード用のパラメータを backend に渡す。
+        reverse=True のときは axis_state.acq_profile.dir を一時的に反転して適用する。
+        """
         if not (backend and connected):
             return
+
         p = axis_state.acq_profile
-        dir_idx = 0 if p.dir == "F" else 1
+
+        # プロファイルの dir は書き換えず、ローカル変数で反転
+        dir_char = p.dir
+        if reverse:
+            dir_char = "R" if dir_char == "F" else "F"
+
+        dir_idx = 0 if dir_char == "F" else 1
+
         try:
-            backend.apply_params(p.v_move, p.acc_move, dir_idx)
+            #backend.apply_params(p.v_move, p.acc_move, dir_idx)
+            backend.apply_move_params(p.v_move, p.acc_move, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
-                self._set_sample_status(f"[Sample ERROR] apply_params(Acq): {e}")
+                self._set_sample_status(f"[Sample ERROR] apply_move_params(Acq): {e}")
             else:
-                self._set_camera_status(f"[Camera ERROR] apply_params(Acq): {e}")
+                self._set_camera_status(f"[Camera ERROR] apply_move_params(Acq): {e}")
 
     def _apply_acq_step_profile_to_backend(
         self,
@@ -2456,23 +2112,31 @@ class StagePanel(QtWidgets.QGroupBox):
         dir_idx = 0 if p.dir == "F" else 1
 
         try:
-            # Step 用パラメータ（step_mm, v_step, acc_step, dir）を backend に渡す
-            if hasattr(backend, "configure_step"):
-                backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
-            else:
-                # 古い backend 向けフォールバック
-                backend.apply_params(p.v_step, p.acc_step, dir_idx)
+            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
+            backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
-                self._set_sample_status(f"[Sample ERROR] apply_params(Acq Step): {e}")
+                self._set_sample_status(f"[Sample ERROR] apply_move_params(Acq Step): {e}")
             else:
-                self._set_camera_status(f"[Camera ERROR] apply_params(Acq Step): {e}")
+                self._set_camera_status(f"[Camera ERROR] apply_move_params(Acq Step): {e}")
 
-
-
-    def _apply_profiles_to_backends(self):
-        self._apply_acq_profile_to_backend(self.sample_state, self.backend_sample, self._connected_sample)
-        self._apply_acq_profile_to_backend(self.camera_state, self.backend_camera, self._connected_camera)
+    def _apply_profiles_to_backends(self, reverse: bool = False):
+        """
+        両軸の Acq Move プロファイルを backend に適用。
+        reverse=True のときは両軸とも「Acq.dir の逆向き」で適用する。
+        """
+        self._apply_acq_profile_to_backend(
+            self.sample_state,
+            self.backend_sample,
+            self._connected_sample,
+            reverse=reverse,
+        )
+        self._apply_acq_profile_to_backend(
+            self.camera_state,
+            self.backend_camera,
+            self._connected_camera,
+            reverse=reverse,
+        )
 
     @Slot()
     def _on_bridge_stage_start(self):
@@ -2481,7 +2145,7 @@ class StagePanel(QtWidgets.QGroupBox):
 
         ・Move 録画: CameraPane が sig_stage_start を emit
             → ここで「Acq Move プロファイル」を backend に適用して
-            start_continuous() を呼ぶだけ。
+              start_continuous() を呼ぶ。
 
         ・Step 録画: CameraPane は sig_stage_start を使わず、
             フレームごとに sig_step_once() を emit する。
@@ -2492,8 +2156,13 @@ class StagePanel(QtWidgets.QGroupBox):
         if not self._connected:
             return
 
-        # 録画の Move 用として「Acq の Move 部分」だけを backend に適用
-        self._apply_profiles_to_backends()
+        # 次のスタートが reverse かどうかをフラグで判定
+        reverse = self._acq_reverse_for_next_start
+        self._acq_reverse_for_next_start = False
+
+        # 録画の Move / test / Opposite 用として
+        # 「Acq の Move 部分」を backend に適用
+        self._apply_profiles_to_backends(reverse=reverse)
 
         try:
             if self.backend_sample and self._connected_sample:
@@ -2503,97 +2172,6 @@ class StagePanel(QtWidgets.QGroupBox):
         except Exception as e:
             self._set_stage_status(f"ERROR: start_continuous: {e}")
 
-
-            
-    """
-    @Slot()
-    def _on_bridge_stage_stop_only(self):
-        if not self._connected:
-            return
-        try:
-            if self.backend_sample and self._connected_sample:
-                self.backend_sample.stop_only()
-            if self.backend_camera and self._connected_camera:
-                self.backend_camera.stop_only()
-        except Exception as e:
-            self._set_stage_status(f"ERROR: stop_only: {e}")
-
-    @Slot(str)
-    def _on_bridge_stage_stop_return(self, direction: str):
-        if not self._connected:
-            return
-        # UI 状態はここでリセット
-        self._on_external_stop()
-
-        try:
-            # Sample 軸
-            if self.backend_sample and self._connected_sample:
-                backend = self.backend_sample
-                # 新 API を優先、なければ旧 API を使う
-                if hasattr(backend, "start_return"):
-                    backend.start_return(direction)
-                else:
-                    backend.start_home_return_async(direction)
-
-            # Camera 軸
-            if self.backend_camera and self._connected_camera:
-                backend = self.backend_camera
-                if hasattr(backend, "start_return"):
-                    backend.start_return(direction)
-                else:
-                    backend.start_home_return_async(direction)
-
-        except Exception as e:
-            self._set_stage_status(f"ERROR: start_return: {e}")
-
-    
-    @Slot(str, int)
-    def _on_bridge_stage_stop(self, direction: str, mode: int):
-
-        print(f"[StagePanel] _on_bridge_stage_stop: direction={direction!r}, mode={mode}")  # デバッグ用
-
-        if not self._connected:
-            return
-
-        # まず UI 側（ボタン状態や Step test タイマーなど）を一括リセット
-        self._on_external_stop()
-
-        # 不正値が来ても STOP_ONLY 扱いにしておく
-        try:
-            mode_enum = StageStopMode(int(mode))
-        except ValueError:
-            mode_enum = StageStopMode.STOP_ONLY
-
-        # STOP_AND_RETURN のときに direction が空なら、後ろで困らないように一応ガード
-        if mode_enum is StageStopMode.STOP_AND_RETURN and not direction:
-            direction = ""
-
-        try:
-            # Sample 軸
-            if self.backend_sample and self._connected_sample:
-                backend = self.backend_sample
-                if mode_enum is StageStopMode.STOP_ONLY:
-                    backend.stop_only()
-                else:
-                    if hasattr(backend, "start_return"):
-                        backend.start_return(direction)
-                    else:
-                        backend.start_home_return_async(direction)
-
-            # Camera 軸
-            if self.backend_camera and self._connected_camera:
-                backend = self.backend_camera
-                if mode_enum is StageStopMode.STOP_ONLY:
-                    backend.stop_only()
-                else:
-                    if hasattr(backend, "start_return"):
-                        backend.start_return(direction)
-                    else:
-                        backend.start_home_return_async(direction)
-
-        except Exception as e:
-            self._set_stage_status(f"ERROR: stage stop({mode_enum.name}): {e}")
-    """
     @Slot(int, int)
     def _on_bridge_stage_stop(self, link_mode: int, stop_mode: int):
         print(f"[StagePanel] _on_bridge_stage_stop: link_mode={link_mode}, stop_mode={stop_mode}")
@@ -2601,14 +2179,17 @@ class StagePanel(QtWidgets.QGroupBox):
         if not self._connected:
             return
 
+        # テスト実行中・Reverse 実行中なら、とりあえず止めて終了
         if self._test_running or self._rev_running:
-            if self.backend_sample:
+            if self.backend_sample and self._connected_sample:
                 self.backend_sample.stop_only()
-            if self.backend_camera:
+            if self.backend_camera and self._connected_camera:
                 self.backend_camera.stop_only()
+            self._on_external_stop()
             return
 
-        self._on_external_stop()  # UI リセットだけ
+        # UI 側（ボタン状態など）を一括リセット
+        self._on_external_stop()
 
         try:
             link_mode_enum = StageLinkMode(int(link_mode))
@@ -2630,25 +2211,18 @@ class StagePanel(QtWidgets.QGroupBox):
                     backend.stop_only()
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
                         s_dir = getattr(self.sample_state.acq_profile, "dir", "") or ""
-                        if hasattr(backend, "start_return"):
-                            backend.start_return(s_dir)
-                        elif hasattr(backend, "start_home_return_async"):
-                            backend.start_home_return_async(s_dir)
+                        backend.start_return(s_dir)
                         print("[StagePanel] sample: MOVE_CONTINUOUS stop + return")
                     else:
                         print("[StagePanel] sample: MOVE_CONTINUOUS stop only")
 
                 elif link_mode_enum == StageLinkMode.STEP:
-                    # STEP では stop_only は絶対に呼ばない
+                    # STEP では stop_only は呼ばない
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
                         s_dir = getattr(self.sample_state.acq_profile, "dir", "") or ""
-                        if hasattr(backend, "start_return"):
-                            backend.start_return(s_dir)
-                        elif hasattr(backend, "start_home_return_async"):
-                            backend.start_home_return_async(s_dir)
+                        backend.start_return(s_dir)
                         print("[StagePanel] sample: STEP return only")
                     else:
-                        # STOP_ONLY なら何もしない（位置はそのまま）
                         print("[StagePanel] sample: STEP no auto-return (no stop_only)")
 
             # ---- Camera 軸 ----
@@ -2659,10 +2233,7 @@ class StagePanel(QtWidgets.QGroupBox):
                     backend.stop_only()
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
                         c_dir = getattr(self.camera_state.acq_profile, "dir", "") or ""
-                        if hasattr(backend, "start_return"):
-                            backend.start_return(c_dir)
-                        elif hasattr(backend, "start_home_return_async"):
-                            backend.start_home_return_async(c_dir)
+                        backend.start_return(c_dir)
                         print("[StagePanel] camera: MOVE_CONTINUOUS stop + return")
                     else:
                         print("[StagePanel] camera: MOVE_CONTINUOUS stop only")
@@ -2670,10 +2241,7 @@ class StagePanel(QtWidgets.QGroupBox):
                 elif link_mode_enum == StageLinkMode.STEP:
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
                         c_dir = getattr(self.camera_state.acq_profile, "dir", "") or ""
-                        if hasattr(backend, "start_return"):
-                            backend.start_return(c_dir)
-                        elif hasattr(backend, "start_home_return_async"):
-                            backend.start_home_return_async(c_dir)
+                        backend.start_return(c_dir)
                         print("[StagePanel] camera: STEP return only")
                     else:
                         print("[StagePanel] camera: STEP no auto-return (no stop_only)")
@@ -2789,12 +2357,14 @@ class StagePanel(QtWidgets.QGroupBox):
         p = axis_state.ctl_profile
         dir_idx = 0 if p.dir == "F" else 1
         try:
-            backend.apply_params(p.v_move, p.acc_move, dir_idx)
+            #backend.apply_params(p.v_move, p.acc_move, dir_idx)
+            backend.apply_move_params(p.v_move, p.acc_move, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
-                self._set_sample_status(f"[Sample ERROR] apply_params(Ctl Move): {e}")
+                self._set_sample_status(f"[Sample ERROR] apply_move_params(Ctl Move): {e}")
             else:
-                self._set_camera_status(f"[Camera ERROR] apply_params(Ctl Move): {e}")
+                self._set_camera_status(f"[Camera ERROR] apply_move_params(Ctl Move): {e}")
+
 
 
     def _apply_ctl_step_profile_to_backend(
@@ -2811,17 +2381,13 @@ class StagePanel(QtWidgets.QGroupBox):
         dir_idx = 0 if p.dir == "F" else 1
 
         try:
-            # 1) Step 用パラメータ（step_mm, v_step, acc_step, dir）を backend に渡す
-            if hasattr(backend, "configure_step"):
-                backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
-            else:
-                # 古い backend 向けのフォールバック（今まで通り）
-                backend.apply_params(p.v_step, p.acc_step, dir_idx)
+            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
+            backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
-                self._set_sample_status(f"[Sample ERROR] apply_params(Ctl Step): {e}")
+                self._set_sample_status(f"[Sample ERROR] apply_move_params(Ctl Step): {e}")
             else:
-                self._set_camera_status(f"[Camera ERROR] apply_params(Ctl Step): {e}")
+                self._set_camera_status(f"[Camera ERROR] apply_move_params(Ctl Step): {e}")
 
 
 
@@ -2836,8 +2402,8 @@ class StagePanel(QtWidgets.QGroupBox):
 
     def _format_ctl_summary(self, prof: StageProfile) -> str:
         """Ctl: Move / Step を 2 行に分割して表示（横幅を抑える）"""
-        line1 = f"Ctl Move: v={prof.v_move:.3f} acc={prof.acc_move:.1f}"    # {prof.dir}"
-        line2 = (f"Ctl Step: v={prof.v_step:.3f} acc={prof.acc_step:.1f} s={prof.step:.4f}")
+        line1 = f"Ctl Move: v={prof.v_move:.3f} acc={prof.acc_move:.1f}"
+        line2 = f"Ctl Step: v={prof.v_step:.3f} acc={prof.acc_step:.1f} s={prof.step:.4f}"
         return line1 + "\n" + line2
 
 
@@ -2850,9 +2416,10 @@ class StagePanel(QtWidgets.QGroupBox):
         if not self._connected:
             return
         try:
-            self._do_acq_step_once(reverse=False)   # ← 常に False 固定
+            self._do_acq_step_once(reverse=False)
         except Exception as e:
             self._set_stage_status(f"ERROR: step_once: {e}")
+
 
 
 
