@@ -2210,8 +2210,7 @@ class StagePanel(QtWidgets.QGroupBox):
                     # 連続モードのときだけ stop_only を使う
                     backend.stop_only()
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
-                        s_dir = getattr(self.sample_state.acq_profile, "dir", "") or ""
-                        backend.start_return(s_dir)
+                        backend.start_return()
                         print("[StagePanel] sample: MOVE_CONTINUOUS stop + return")
                     else:
                         print("[StagePanel] sample: MOVE_CONTINUOUS stop only")
@@ -2219,11 +2218,10 @@ class StagePanel(QtWidgets.QGroupBox):
                 elif link_mode_enum == StageLinkMode.STEP:
                     # STEP では stop_only は呼ばない
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
-                        s_dir = getattr(self.sample_state.acq_profile, "dir", "") or ""
-                        backend.start_return(s_dir)
-                        print("[StagePanel] sample: STEP return only")
+                        backend.start_return()
+                        print("[StagePanel] sample: STEP + return")
                     else:
-                        print("[StagePanel] sample: STEP no auto-return (no stop_only)")
+                        print("[StagePanel] sample: STEP no auto-return")
 
             # ---- Camera 軸 ----
             if self.backend_camera and self._connected_camera:
@@ -2232,19 +2230,17 @@ class StagePanel(QtWidgets.QGroupBox):
                 if link_mode_enum == StageLinkMode.MOVE_CONTINUOUS:
                     backend.stop_only()
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
-                        c_dir = getattr(self.camera_state.acq_profile, "dir", "") or ""
-                        backend.start_return(c_dir)
+                        backend.start_return()
                         print("[StagePanel] camera: MOVE_CONTINUOUS stop + return")
                     else:
                         print("[StagePanel] camera: MOVE_CONTINUOUS stop only")
 
                 elif link_mode_enum == StageLinkMode.STEP:
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
-                        c_dir = getattr(self.camera_state.acq_profile, "dir", "") or ""
-                        backend.start_return(c_dir)
-                        print("[StagePanel] camera: STEP return only")
+                        backend.start_return()
+                        print("[StagePanel] camera: STEP + return")
                     else:
-                        print("[StagePanel] camera: STEP no auto-return (no stop_only)")
+                        print("[StagePanel] camera: STEP no auto-return")
 
         except Exception as e:
             self._set_stage_status(f"ERROR: stage stop({link_mode_enum.name}): {e}")
