@@ -1,20 +1,31 @@
-# stage_backends/Thorlabs_KDC101.py
+# stage_backends/Thorlabs_KST101.py
 # -*- coding: utf-8 -*-
 
-from dataclasses import dataclass, field
+
+# TODO: ↑↑と↓↓がステップになってる
+# TODO: ↑と↓のステップサイズが0.05mmに固定されてる
+# TODO: Start testがstepは動くけど、moveが動かない
+# TODO: Start recordingのstepはOKだけど、moveが動かない
+# TODO: settings...の内容がmotionworkerに渡ってない
 
 from .stage_backend_base import IStageBackend, StepDirection
 from timing_logger import TimingLogger
 
+import os
 import time
+from pathlib import Path
+from contextlib import contextmanager
+
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Slot, QSettings
 
-from .internal import xa_shared
+import clr
+from System import Decimal as SysDecimal
+from System.Globalization import CultureInfo
+from dataclasses import dataclass, field
 
 
 # ---- 設定用データクラス ---------------------------------------------
-
 @dataclass
 class MoveParams:
     """連続移動（move/jog/return の基準）用パラメータ."""
@@ -38,9 +49,101 @@ class StageAxisConfig:
     step: StepParams = field(default_factory=StepParams)
 
 
-class ThorlabsKDC101Backend(IStageBackend):
+
+# TODO:これを遅延インポートにする
+# ---- Kinesis (.NET) 用設定 ----
+KINESIS_ROOT = r"C:\Program Files\Thorlabs\Kinesis"
+KINESIS_LIBDIR = KINESIS_ROOT  # DLL がここにある前提
+
+# DLL ディレクトリが存在する場合のみ追加（無いと FileNotFoundError になる）
+if os.path.isdir(KINESIS_LIBDIR):
+    try:
+        os.add_dll_directory(KINESIS_LIBDIR)
+    except Exception:
+        # 古い Python / Windows の場合は PATH にある前提
+        pass
+else:
+    print(f"[ThorlabsKST101Backend] warning: KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+
+_KINESIS_LOADED = False
+
+# ensure_kinesis_loaded() 内でセットされるグローバル参照
+DeviceManagerCLI = None
+KCubeStepper = None
+VelocityParameters = None
+MotorDirection = None
+
+
+@contextmanager
+def pushd(p: str):
+    cur = os.getcwd()
+    os.chdir(p)
+    try:
+        yield
+    finally:
+        os.chdir(cur)
+
+
+def _mkdec(x) -> SysDecimal:
+    """Decimal.Parse + InvariantCulture で Real Units(mm 等) を渡す."""
+    return SysDecimal.Parse(str(x), CultureInfo.InvariantCulture)
+
+
+def ensure_kinesis_loaded():
     """
-    Thorlabs KDC101 を 1 軸だけ扱う backend。
+    Kinesis の .NET DLL をプロセス全体で一度だけ読み込む。
+    複数 backend インスタンスから呼ばれても安全。
+    """
+    global _KINESIS_LOADED
+    global DeviceManagerCLI, KCubeStepper, VelocityParameters, MotorDirection
+
+    if _KINESIS_LOADED:
+        return
+
+    if not os.path.isdir(KINESIS_LIBDIR):
+        raise RuntimeError(f"KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+
+    kdir = Path(KINESIS_LIBDIR)
+
+    # --- 実際に存在する CLI DLL をフルパス指定で読み込む ---
+    clr.AddReference(str(kdir / "Thorlabs.MotionControl.DeviceManagerCLI.dll"))
+    clr.AddReference(str(kdir / "Thorlabs.MotionControl.GenericMotorCLI.dll"))
+    clr.AddReference(str(kdir / "Thorlabs.MotionControl.KCube.StepperMotorCLI.dll"))
+
+    # .NET 側の型を import
+    from Thorlabs.MotionControl.DeviceManagerCLI import DeviceManagerCLI as _DM
+    from Thorlabs.MotionControl.KCube.StepperMotorCLI import KCubeStepper as _KC
+
+    # VelocityParameters と MotorDirection を個別に import
+    try:
+        from Thorlabs.MotionControl.GenericMotorCLI.ControlParameters import (
+            VelocityParameters as _VP,
+        )
+    except Exception as e:
+        raise RuntimeError(
+            "VelocityParameters not found in GenericMotorCLI.ControlParameters. "
+            "Check Kinesis installation."
+        ) from e
+
+    try:
+        from Thorlabs.MotionControl.GenericMotorCLI import MotorDirection as _MD
+    except Exception as e:
+        raise RuntimeError(
+            "MotorDirection not found in GenericMotorCLI. Check Kinesis installation."
+        ) from e
+
+    DeviceManagerCLI = _DM
+    KCubeStepper = _KC
+    VelocityParameters = _VP
+    MotorDirection = _MD
+
+    _KINESIS_LOADED = True
+
+
+
+class ThorlabsKST101Backend(IStageBackend):
+    """
+    Thorlabs KST101 + ZFS25B を 1 軸として扱う Kinesis backend。
     StagePanel からは「1 軸」として見える。
     """
 
@@ -52,10 +155,10 @@ class ThorlabsKDC101Backend(IStageBackend):
     req_start_jog = QtCore.Signal(int)   # direction_index (0=Forward, 1=Reverse)
     req_stop_jog = QtCore.Signal()
     # StepDirection は IntEnum なので Signal(int) で値を渡す
-    req_step = QtCore.Signal(int)        
+    req_step = QtCore.Signal(int)        # StepDirection.value (0=FORWARD, 1=REVERSE)
     req_return = QtCore.Signal(str)
 
-    SETTINGS_GROUP_BASE = "StageBackend/Thorlabs_KDC101"
+    SETTINGS_GROUP_BASE = "StageBackend/Thorlabs_KST101"
 
     def __init__(self, timing_logger: TimingLogger | None, parent=None):
         super().__init__(timing_logger=timing_logger, parent=parent)
@@ -63,14 +166,13 @@ class ThorlabsKDC101Backend(IStageBackend):
         # 設定モデル
         self._config = StageAxisConfig()
 
-        # IStageBackend 側にもあるが、明示しておく
         self.serial: str = ""
-        self.product_code: str = "Z825"
+        self.product_code: str = "ZFS25B"        # KDC101 互換のためだけに残す（Kinesis では特に使用しない）
 
-        self.device = None  # type: ignore[assignment]
+        self.device = None  # type: ignore[assignment]        # Kinesis デバイスハンドル
         self._start_mm: float | None = None
 
-        # 連続移動用の現在方向（KDC101 API の MoveDirection）
+        # Move 用パラメータ
         self._move_direction = None
         self._v_mm_s = self._config.move.v_mm_s
         self._a_mm_s2 = self._config.move.a_mm_s2
@@ -81,8 +183,10 @@ class ThorlabsKDC101Backend(IStageBackend):
         self._step_v_mm_s = self._config.step.v_mm_s
         self._step_a_mm_s2 = self._config.step.a_mm_s2
 
-        #self._ret_thread: QtCore.QThread | None = None
         self._returning = False
+        # 連続移動状態フラグ
+        self._continuous_moving: bool = False
+        self._connected: bool = False
 
         # ---- Motion worker / thread 設定（device を触るのはここ経由）----
         self._motion_thread: QtCore.QThread | None = QtCore.QThread(self)
@@ -102,7 +206,6 @@ class ThorlabsKDC101Backend(IStageBackend):
         self._motion_thread.start()
 
     # ---- settings ヘルパ ---------------------------------------------
-
     def _settings_group(self) -> str:
         """現在の axis_name に基づく settings グループ名を返す."""
         axis = getattr(self, "axis_name", "Single")
@@ -209,10 +312,10 @@ class ThorlabsKDC101Backend(IStageBackend):
         settings.endGroup()
         settings.sync()
 
+    """
+    # KST101には必要ない？
     def _update_move_direction_from_dir_index(self, dir_index: int) -> None:
-        """
-        UI の dir_index (0/1) から KDC101 API 用 MoveDirection を更新する。
-        """
+        # UI の dir_index (0/1) から KDC101 API 用 MoveDirection を更新する。
         # StagePane: dir_index == 0 → "Forward"（＋方向に動いてほしい）
         # KDC101 実機では API の Reverse が ＋方向なので、
         # 0 → Move_Direction_Reverse, 1 → Move_Direction_Forward にする
@@ -220,6 +323,7 @@ class ThorlabsKDC101Backend(IStageBackend):
             self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
         else:
             self._move_direction = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
+    """
 
     def _apply_move_params_to_device(self) -> None:
         """
@@ -230,65 +334,50 @@ class ThorlabsKDC101Backend(IStageBackend):
             return
 
         try:
-            v_dev = int(
-                round(
-                    self.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        self._v_mm_s,
-                    )
-                )
-            )
-            a_dev = int(
-                round(
-                    self.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        self._a_mm_s2,
-                    )
-                )
-            )
-            self.device.set_velocity_params(0, a_dev, v_dev)
-            self.sig_status.emit("params applied.")
+            vp = VelocityParameters()
+            vp.Acceleration = _mkdec(self._a_mm_s2)
+            vp.MaxVelocity = _mkdec(self._v_mm_s)
+            self.device.SetVelocityParams(vp)
+            self.sig_status.emit("movie params applied.")
         except Exception as e:
             self.sig_error.emit(f"apply_move_params: {e}")
 
-    # ---- util ----
+
+    # ---- 設定ダイアログ ----
     def show_setup_dialog(self, parent=None) -> bool:
         """
-        KDC101 用設定ダイアログ（2 段階）:
+        KST101 用設定ダイアログ:
         1) Serial を入力 → 接続を試みる
-        2) 接続に成功したら、実機から列挙した product_code（Z825/Z925 等）を選択
-        両方とも QSettings 経由で保存・復元する。
+
+        Kinesis 側で ZFS25B の設定を済ませてある前提。
         """
-        print("[ThorlabsKDC101Backend] show_setup_dialog called")
-        # まず現在の axis に対する settings を読み込んでおく
-        self._load_settings()
+        settings = QSettings("LabSuite", "StageControl")
 
-        # --- 1) serial ダイアログ ---
-        serial_default = self.serial
-        product_default = self.product_code or "Z825"
+        axis = getattr(self, "axis_name", "Single")
+        group = f"{self.SETTINGS_GROUP_BASE}/{axis}"
 
-        dlg1 = QtWidgets.QDialog(parent)
-        dlg1.setWindowTitle("Thorlabs KDC101 setup (Serial)")
-        layout1 = QtWidgets.QFormLayout(dlg1)
+        settings.beginGroup(group)
+        serial_default = settings.value("serial", self.serial, str)
+        settings.endGroup()
+
+        dlg = QtWidgets.QDialog(parent)
+        dlg.setWindowTitle("Thorlabs KST101 setup (Serial)")
+        layout = QtWidgets.QFormLayout(dlg)
 
         ed_serial = QtWidgets.QLineEdit()
-        ed_serial.setPlaceholderText("2726xxxx")
-        ed_serial.setText(serial_default)
-        layout1.addRow("Serial:", ed_serial)
+        ed_serial.setPlaceholderText("2600xxxx")
+        ed_serial.setText(serial_default or "")
+        layout.addRow("Serial:", ed_serial)
 
-        buttons1 = QtWidgets.QDialogButtonBox(
+        buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
-            parent=dlg1,
+            parent=dlg,
         )
-        buttons1.accepted.connect(dlg1.accept)
-        buttons1.rejected.connect(dlg1.reject)
-        layout1.addRow(buttons1)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addRow(buttons)
 
-
-        if dlg1.exec() != QtWidgets.QDialog.Accepted:
-
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
             return False
 
         serial = ed_serial.text().strip()
@@ -296,124 +385,128 @@ class ThorlabsKDC101Backend(IStageBackend):
             self.sig_error.emit("serial is required")
             return False
 
-        # backend に反映
         self.serial = serial
 
-        # --- 1') serial が決まったので接続を試みる ---
+        settings.beginGroup(group)
+        settings.setValue("serial", self.serial)
+        settings.endGroup()
+        settings.sync()
+
+        # 接続を試みる
         self.connect_device()
-        if not getattr(self, "_connected", False) or self.device is None:
-            # connect_device 側で sig_error を出している想定
-            return False
+        return bool(self._connected and self.device is not None)
 
-        # --- 2) 接続後、実機から対応 device を列挙して選択ダイアログ ---
+    # ---- 実機から現在位置(mm) を読み出して _current_mm を同期 ----
+    def _update_current_from_device(self):
+        if not self._connected or self.device is None:
+            return
         try:
-            raw = self.device.get_connected_products_supported() or []
-            products = self._normalize_products(raw)
+            pos_dec = int(self.device.GetPositionCounter())
+            realUnit =  SysDecimal()
+            time.sleep(1)
+            self.device.GetRealValueFromDeviceUnit(pos_dec, realUnit, 0)
+            pos_mm = float(realUnit.ToString(CultureInfo.InvariantCulture))
 
-        except Exception as ee:
-            # 列挙に失敗した場合は fallback として現在の product_code だけ出す
-            self.sig_status.emit(f"enumeration warning: {ee}")
-            products = [product_default or "Z825"]
-
-        if not products:
-            products = [product_default or "Z825"]
-
-        dlg2 = QtWidgets.QDialog(parent)
-        dlg2.setWindowTitle("Thorlabs KDC101 setup (Device)")
-        layout2 = QtWidgets.QFormLayout(dlg2)
-
-        cmb_product = QtWidgets.QComboBox()
-        cmb_product.setEditable(True)
-        cmb_product.addItems(products)
-
-        # 既存設定があれば優先
-        if product_default in products:
-            cmb_product.setCurrentText(product_default)
-        else:
-            cmb_product.setCurrentText(products[0])
-
-        layout2.addRow("Device:", cmb_product)
-
-        buttons2 = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
-            parent=dlg2,
-        )
-        buttons2.accepted.connect(dlg2.accept)
-        buttons2.rejected.connect(dlg2.reject)
-        layout2.addRow(buttons2)
-
-        if dlg2.exec() != QtWidgets.QDialog.Accepted:
-            # デバイス選択をキャンセルした場合は、接続自体はされているが
-            # product_code は変更せず現状維持にする
-            # serial はすでに更新されているので保存しておく
-            self._save_settings()
-            return True
-
-        product_code = cmb_product.currentText().strip() or products[0]
-        self.product_code = product_code
-
-        # デバイスに反映
-        self.set_product(product_code)
-
-        # 設定を保存（serial / product_code / move / step）
-        self._save_settings()
-
-        return True
-
-    def _normalize_products(self, p):
-        if isinstance(p, (bytes, bytearray)):
-            s = p.decode("utf-8", "ignore")
-            return [x.strip() for x in s.split(",") if x.strip()]
-        if isinstance(p, str):
-            return [x.strip() for x in p.split(",") if x.strip()]
-        if isinstance(p, (list, tuple)):
-            out = []
-            for x in p:
-                out.append(
-                    (x.decode("utf-8", "ignore") if isinstance(x, (bytes, bytearray)) else str(x)).strip()
-                )
-            return [x for x in out if x]
-        return [str(p)]
+            self._current_mm = pos_mm
+        except Exception as e:
+            # 位置取得に失敗しても致命傷にはしない
+            self.sig_status.emit(f"warning: failed to read current position: {e}")
 
     # ---------------- IStageBackend API 実装 ----------------
     @Slot()
     def connect_device(self):
         print(
-            f"[ThorlabsKDC101Backend] axis={getattr(self, 'axis_name', 'N/A')} "
+            f"[ThorlabsKST101Backend] axis={getattr(self, 'axis_name', 'N/A')} "
             f"connect_device() serial={self.serial!r}"
         )
         try:
             if not self.serial:
                 raise ValueError("serial not set")
 
-            # グローバルに一度だけ SDK を初期化
-            xa_shared.ensure_started()
-            print("[ThorlabsKDC101Backend] XA started")  # デバッグ用
+            print("[KST101] ensure_kinesis_loaded() ...")
+            ensure_kinesis_loaded()
+            print("[KST101] ensure_kinesis_loaded() done")
 
-            self.device = xa_shared.KDC101(
-                self.serial, "", xa_shared.TLMC_OperatingModes.Default
-            )
-            self.device.set_enable_state(
-                xa_shared.TLMC_ChannelEnableStates.ChannelEnabled
-            )
+            last_err = None
+            self._connected = False
+            self.device = None
 
-            # 製品コード設定
-            self.device.set_connected_product(self.product_code)
+            # ちょっとした不安定さに対してリトライ
+            for i in range(5):
+                try:
+                    print(f"[KST101] BuildDeviceList (try {i+1}) ...")
+                    DeviceManagerCLI.BuildDeviceList()
+                    print("[KST101] DeviceManagerCLI.BuildDeviceList() done")
 
-            # 対応製品列挙
+                    print("[KST101] KCubeStepper.CreateKCubeStepper(...) ...")
+                    dev = KCubeStepper.CreateKCubeStepper(self.serial)
+                    print("[KST101] KCubeStepper.CreateKCubeStepper(...) done")
+
+                    if dev is None:
+                        raise RuntimeError(f"KCubeStepper.CreateKCubeStepper({self.serial}) returned None")
+
+                    print("[KST101] device.Connect(...) ...")
+                    dev.Connect(self.serial)
+                    print("[KST101] device.Connect(...) done")
+
+                    try:
+                        dev.WaitForSettingsInitialized(5000)
+                    except Exception:
+                        pass
+
+                    time.sleep(0.2)
+                    print("[KST101] StartPolling(250) ...")
+                    dev.StartPolling(250)
+                    print("[KST101] StartPolling(250) done")
+
+                    time.sleep(0.2)
+                    print("[KST101] EnableDevice() ...")
+                    dev.EnableDevice()
+                    print("[KST101] EnableDevice() done")
+
+                    time.sleep(0.3)
+                    print("[KST101] LoadMotorConfiguration(...) ...")
+                    try:
+                        # シリアルに紐づく設定ファイルがあれば使う
+                        dev.LoadMotorConfiguration(self.serial)
+                    except Exception:
+                        # 無くてもそのまま続行
+                        pass
+                    print("[KST101] LoadMotorConfiguration(...) done")
+
+                    self.device = dev
+                    self._connected = True
+                    break
+
+                except Exception as e_try:
+                    last_err = e_try
+                    print(f"[KST101] connect attempt {i+1} failed: {e_try}")
+                    time.sleep(1.0)
+
+            if not self._connected or self.device is None:
+                raise RuntimeError(f"failed to connect to KST101 ({self.serial}): {last_err}")
+
+            print("[KST101] _update_current_from_device() ...")
+            self._update_current_from_device()
+            print("[KST101] _update_current_from_device() done")
+
             try:
-                raw = self.device.get_connected_products_supported() or []
-                self.sig_supported_products.emit(self._normalize_products(raw))
-            except Exception as ee:
-                self.sig_status.emit(f"enumeration warning: {ee}")
+                print("[KST101] GetDeviceInfo() ...")
+                dev_info = self.device.GetDeviceInfo()
+                print(f"[KST101] GetDeviceInfo() done: {dev_info.Description}")
+                self.sig_status.emit(f"{dev_info.Description}")
+            except Exception:
+                pass
 
-            self._connected = True
             self.sig_connected.emit(True)
             self.sig_status.emit(f"connected: {self.serial}")
+            print("[KST101] connect_device() finished normally")
 
         except Exception as e:
+            print(f"[KST101] connect_device() exception: {e!r}")
             self.sig_error.emit(f"connect_device: {e}")
             self._connected = False
+            self.device = None
             self.sig_connected.emit(False)
 
     @Slot()
@@ -421,20 +514,20 @@ class ThorlabsKDC101Backend(IStageBackend):
         try:
             if self.device is not None:
                 try:
-                    self.device.disconnect()
-                    self.device.close()
+                    # ポーリング停止 → 切断
+                    self.device.StopPolling()
+                except Exception:
+                    pass
+                try:
+                    self.device.Disconnect()
                 except Exception:
                     pass
                 self.device = None
 
-            # Motion worker thread を停止
             if self._motion_thread is not None:
                 self._motion_thread.quit()
                 self._motion_thread.wait()
                 self._motion_thread = None
-
-            # ここでは XASDK.shutdown() は呼ばない
-            # （プロセス終了時に OS 側で解放される想定）
 
             self._connected = False
             self.sig_connected.emit(False)
@@ -444,18 +537,14 @@ class ThorlabsKDC101Backend(IStageBackend):
 
     @Slot(str)
     def set_product(self, product_code: str):
+        """
+        XA 版との互換のためだけに残しているが、
+        Kinesis / KST101 では特に何もしない。
+        """
         self.product_code = product_code
-        if not self._connected or self.device is None:
-            self.sig_status.emit(f"product set (pending): {product_code}")
-            return
-        try:
-            self.device.set_connected_product(product_code)
-            self.sig_status.emit(f"product set: {product_code}")
-        except Exception as e:
-            self.sig_error.emit(f"set_product: {e}")
+        self.sig_status.emit(f"product (ignored on KST101): {product_code}")
 
     # ---- move 用パラメータ適用 ---------------------------------------
-
     @Slot(float, float, int)
     def apply_move_params(self, v_mm_s: float, a_mm_s2: float, dir_index: int):
         """
@@ -470,13 +559,14 @@ class ThorlabsKDC101Backend(IStageBackend):
         # backend 内キャッシュを更新
         self._v_mm_s = mv.v_mm_s
         self._a_mm_s2 = mv.a_mm_s2
-        self._update_move_direction_from_dir_index(mv.dir_index)
+        #self._update_move_direction_from_dir_index(mv.dir_index)
 
         # 設定を保存
         self._save_settings()
 
         # 実機に反映
         self._apply_move_params_to_device()
+
 
     # ---- step 用パラメータ適用 ---------------------------------------
     @Slot(float, float, float, int)
@@ -497,10 +587,11 @@ class ThorlabsKDC101Backend(IStageBackend):
         self._step_a_mm_s2 = st.a_mm_s2
 
         # 必要なら Step 用の「向き」も move 設定に反映
-        self._config.move.dir_index = int(dir_index)
-        self._update_move_direction_from_dir_index(self._config.move.dir_index)
+        #self._config.move.dir_index = int(dir_index)
+        #self._update_move_direction_from_dir_index(self._config.move.dir_index)
 
         self._save_settings()
+
 
     @Slot()
     def home(self):
@@ -511,14 +602,18 @@ class ThorlabsKDC101Backend(IStageBackend):
 
     @Slot()
     def register_start_point(self):
+        """
+        現在位置を開始位置として登録。
+        可能なら Kinesis から現在位置を読み直してから _current_mm を使う。
+        """
         if not self._connected or self.device is None:
             self.sig_error.emit("register_start_point: not connected")
             return
         try:
-            c = self.device.get_position_counter(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
-            self._start_mm = self.device.convert_from_device_units_to_physical(
-                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance, c
-            ).converted_value
+            # 実機位置で同期してから開始位置登録
+            self._update_current_from_device()
+
+            self._start_mm = float(self._current_mm)
             self.sig_status.emit(f"Start pos registered: {self._start_mm:.6f} mm")
             self.sig_startpos_updated.emit(self._start_mm)
         except Exception as e:
@@ -534,12 +629,13 @@ class ThorlabsKDC101Backend(IStageBackend):
             return
         self.req_go_start.emit()
 
-    @Slot()
-    def start_continuous(self):
+    @Slot(int)
+    def start_continuous(self, direction_index: int):
         if not self._connected or self.device is None:
             self.sig_error.emit("start_continuous: not connected")
             return
-        self.req_start_continuous.emit()
+        self.req_start_continuous.emit(direction_index)
+
 
     @Slot()
     def stop_only(self):
@@ -564,34 +660,43 @@ class ThorlabsKDC101Backend(IStageBackend):
 
     def step(self, direction: StepDirection):
         """
-        direction: StepDirection.FORWARD (= +1) / StepDirection.REVERSE (= -1)
-        Step size / velocity / acceleration は apply_step_params() で事前に設定された値を使う。
+        direction: StepDirection.FORWARD (= 0) / StepDirection.REVERSE (= 1)
+
+        Step size / velocity / acceleration は apply_step_params() で
+        事前に設定された値を使う想定。
         """
         if not self._connected or self.device is None:
             self.sig_error.emit("step: not connected")
             return
+
         self.req_step.emit(int(direction))
 
     @Slot(str)
     def start_return(self, direction_for_log: str):
+        """
+        録画終了時などに「開始位置へ戻る」ための非同期処理を開始する。
+        direction_for_log:
+            timing_logger があれば、その CSV を flush するディレクトリ。
+        """
         if not self._connected or self.device is None:
             self.sig_error.emit("stop return: not connected")
             return
         if self._returning:
             self.sig_status.emit("already returning...")
             return
+
         self._returning = True
         self.req_return.emit(direction_for_log)
 
 
 class _MotionWorker(QtCore.QObject):
     """
-    実際に KDC101 device を叩くスレッド用 worker。
-    ThorlabsKDC101Backend からの req_* シグナルだけを入口にして、
+    実際に KST101 (KCubeStepper) を叩くスレッド用 worker。
+    Backend からの req_* シグナルだけを入口にして、
     ここからのみ device.* を呼ぶ。
     """
 
-    def __init__(self, backend: ThorlabsKDC101Backend):
+    def __init__(self, backend: ThorlabsKST101Backend):
         super().__init__()
         self._b = backend
 
@@ -605,7 +710,9 @@ class _MotionWorker(QtCore.QObject):
             if c.timing:
                 c.timing.log_event("HOME_SINGLE_BEGIN")
             c.sig_status.emit("homing...")
-            c.device.home(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
+            # Kinesis サンプルと同じ Home(timeout) パターン
+            c.device.Home(60000)  # 60 s
+            c._current_mm = 0.0   # ホーム位置を 0 mm とみなす
             if c.timing:
                 c.timing.log_event("HOME_SINGLE_DONE")
             c.sig_status.emit("homed.")
@@ -631,232 +738,207 @@ class _MotionWorker(QtCore.QObject):
             RET_V_MM_S = 1.5
             RET_A_MM_S2 = 1.0
 
+            # 速度パラメータを一時的に早めにする
             try:
-                v_dev_fast = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            RET_V_MM_S,
-                        )
-                    )
-                )
-                a_dev_fast = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            RET_A_MM_S2,
-                        )
-                    )
-                )
-                c.device.set_velocity_params(0, a_dev_fast, v_dev_fast)
+                vp = VelocityParameters()
+                vp.Acceleration = _mkdec(RET_A_MM_S2)
+                vp.MaxVelocity = _mkdec(RET_V_MM_S)
+                c.device.SetVelocityParams(vp)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to set fast goto speed: {ee}")
 
             c.sig_status.emit("returning to start position...")
-            cnt = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        c._start_mm,
-                    )
-                )
-            )
-            c.device.move_absolute(
-                xa_shared.TLMC_MoveModes.MoveMode_Absolute,
-                cnt,
-                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
-            )
+            target = _mkdec(c._start_mm)
+            try:
+                c.device.MoveTo(target, 60000)
+            except Exception:
+                c.device.MoveTo(target)
+            c._current_mm = float(c._start_mm)
             c.sig_status.emit("at start position.")
 
         except Exception as e:
             c.sig_error.emit(f"go_to_start_position: {e}")
 
         finally:
+            # 元の速度に戻す
             try:
                 if prev_v is not None and c.device is not None:
-                    v_dev_orig = int(
-                        round(
-                            c.device.convert_from_physical_to_device(
-                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                                prev_v,
-                            )
-                        )
-                    )
-                    a_dev_orig = int(
-                        round(
-                            c.device.convert_from_physical_to_device(
-                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                                prev_a,
-                            )
-                        )
-                    )
-                    c.device.set_velocity_params(0, a_dev_orig, v_dev_orig)
+                    vp = VelocityParameters()
+                    vp.Acceleration = _mkdec(prev_a)
+                    vp.MaxVelocity = _mkdec(prev_v)
+                    c.device.SetVelocityParams(vp)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed (goto): {ee}")
 
-    @Slot()
-    def do_start_continuous(self):
+    @Slot(int)
+    def do_start_continuous(self, direction_index: int):
         c = self._b
         if not c._connected or c.device is None:
             c.sig_error.emit("start_continuous: not connected")
             return
+
+        if c._continuous_moving:
+            c.sig_status.emit("continuous move already running.")
+            return
+
         try:
+            if direction_index == 0:
+                direction = MotorDirection.Forward
+                d_label = "Forward"
+            else:
+                direction = MotorDirection.Backward
+                d_label = "Backward"
+
             if c.timing:
-                c.timing.log_event("STAGE_START")
-            c.device.move_continuous(c._move_direction, xa_shared.TLMC_Wait.TLMC_NoWait)
-            c.sig_status.emit("continuous move started.")
+                c.timing.log_event("CONTINUOUS_BEGIN")
+
+            c.device.MoveContinuous(direction)
+            c._continuous_moving = True
+            c.sig_status.emit(f"continuous move started ({d_label}).")
         except Exception as e:
+            c._continuous_moving = False
             c.sig_error.emit(f"start_continuous: {e}")
+
 
     @Slot()
     def do_stop_only(self):
+        """
+        連続移動（MoveAtVelocity）を停止する。
+        StopProfiled() のみ使用する。
+        """
         c = self._b
         if not c._connected or c.device is None:
             c.sig_error.emit("stop_only: not connected")
             return
+
         try:
             if c.timing:
-                c.timing.log_event("STAGE_STOP_CMD")
-            c.device.stop(
-                xa_shared.TLMC_StopModes.StopMode_Profiled,
-                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
-            )
-            c.sig_status.emit("stopped (test).")
+                c.timing.log_event("CONTINUOUS_STOP_CMD")
+
+            # プロファイル停止のみを使う
+            c.device.Stop()
+            c._continuous_moving = False
+
+            # 停止後に位置を実機から同期
+            try:
+                c._update_current_from_device()
+            except Exception:
+                pass
+
+            c.sig_status.emit("continuous move stopped.")
         except Exception as e:
+            c._continuous_moving = False
             c.sig_error.emit(f"stop_only: {e}")
 
     @Slot(int)
     def do_start_jog(self, direction_index: int):
+        """
+        Jog(↑↑/↓↓)用:
+        move 用パラメータ(_v_mm_s, _a_mm_s2)を適用して MoveAtVelocity(...) を開始する。
+        Stop ボタンで do_stop_jog が呼ばれる前提。
+        """
         c = self._b
         if not c._connected or c.device is None:
-            c.sig_error.emit("start: not connected")
+            c.sig_error.emit("start_jog: not connected")
             return
-        if c._jog_active:
-            c.sig_status.emit("already running")
+
+        # すでに連続移動中なら何もしない（必要に応じて仕様に合わせて変更）
+        if c._continuous_moving:
+            c.sig_status.emit("jog already running.")
             return
 
         try:
-            # StagePane: direction_index == 0 → 「↑↑」= Forward（＋）
-            # → API 側では Reverse を呼ぶ（KDC101 仕様）
+            """
+            # 現在の move パラメータを Kinesis 側に適用
+            try:
+                vp = VelocityParameters()
+                vp.Acceleration = _mkdec(c._a_mm_s2)
+                vp.MaxVelocity  = _mkdec(c._v_mm_s)
+                c.device.SetVelocityParams(vp)
+            except Exception as ee:
+                c.sig_status.emit(f"warning: failed to apply jog move params: {ee}")
+            """
             if direction_index == 0:
-                direction = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
-                direction_label = "Forward"
+                direction = MotorDirection.Forward
+                d_label = "Forward"
             else:
-                direction = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
-                direction_label = "Reverse"
+                direction = MotorDirection.Backward
+                d_label = "Backward"
 
-            c.device.move_continuous(direction, xa_shared.TLMC_Wait.TLMC_NoWait)
-            c._jog_active = True
-            c.sig_status.emit(f"started ({direction_label})")
+            if c.timing:
+                c.timing.log_event("JOG_BEGIN")
 
+            c.device.MoveContinuous(direction)
+            c._continuous_moving = True
+            c.sig_status.emit(
+                f"jog started ({d_label}, v={c._v_mm_s:.3f} mm/s, a={c._a_mm_s2:.3f} mm/s^2)."
+            )
         except Exception as e:
-            c.sig_error.emit(f"start: {e}")
+            c._continuous_moving = False
+            c.sig_error.emit(f"start_jog: {e}")
 
     @Slot()
     def do_stop_jog(self):
+        """
+        Jog(↑↑/↓↓)連続移動の停止。
+        StopProfiled() で停止し、位置を同期する。
+        """
         c = self._b
         if not c._connected or c.device is None:
-            c.sig_error.emit("stop: not connected")
-            return
-        if not c._jog_active:
+            c.sig_error.emit("stop_jog: not connected")
             return
 
         try:
-            c.device.stop(
-                xa_shared.TLMC_StopModes.StopMode_Profiled,
-                xa_shared.TLMC_Wait.TLMC_InfiniteWait,
-            )
-            c._jog_active = False
-            c.sig_status.emit("stopped")
+            if not c._continuous_moving:
+                c.sig_status.emit("jog already stopped.")
+                return
 
+            if c.timing:
+                c.timing.log_event("JOG_STOP_CMD")
+
+            c.device.Stop()
+            c._continuous_moving = False
+
+            # 停止後に位置を同期（失敗しても致命的ではないので握りつぶす）
+            try:
+                c._update_current_from_device()
+            except Exception:
+                pass
+
+            c.sig_status.emit("jog stopped.")
         except Exception as e:
-            c.sig_error.emit(f"stop: {e}")
+            c._continuous_moving = False
+            c.sig_error.emit(f"stop_jog: {e}")
+
 
     @Slot(int)
     def do_step(self, direction_value: int):
+        """
+        StepDirection に基づいて、_step_mm ぶんだけ MoveRelative で移動する。
+        """
         c = self._b
         if not c._connected or c.device is None:
             c.sig_error.emit("step: not connected")
             return
 
+        if direction_index == 0:
+            direction = MotorDirection.Forward
+            d_label = "Forward"
+        else:
+            direction = MotorDirection.Backward
+            d_label = "Backward"
+
         try:
-            direction = StepDirection(direction_value)
-
-            # --- Step size ---
             step_mm = c._step_mm
-
-            step_counts = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        step_mm,
-                    )
-                )
-            )
-            if step_counts <= 0:
-                step_counts = 1
-
-            # --- Step 用の速度・加速度 ---
-            v_mm_s = c._step_v_mm_s
-            a_mm_s2 = c._step_a_mm_s2
-
-            v_dev = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        v_mm_s,
-                    )
-                )
-            )
-            a_dev = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        a_mm_s2,
-                    )
-                )
-            )
-
-            jp = c.device.get_move_jog_params(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
-
-            c.device.set_move_jog_params(
-                xa_shared.TLMC_JogModes.JogMode_SingleStep,
-                step_counts,
-                jp.min_velocity,
-                v_dev,
-                a_dev,
-                xa_shared.TLMC_JogStopModes.JogStopMode_Profiled,
-            )
-
-            # 方向は StepDirection から決める
-            if direction is StepDirection.FORWARD:
-                # UI: Forward（↑） → API: Reverse（＋方向）
-                d = xa_shared.TLMC_MoveDirection.Move_Direction_Reverse
-                d_label = "Forward"
-            else:
-                # UI: Reverse（↓） → API: Forward（－方向）
-                d = xa_shared.TLMC_MoveDirection.Move_Direction_Forward
-                d_label = "Reverse"
-
-            c.device.move_jog(d, xa_shared.TLMC_Wait.TLMC_InfiniteWait)
-            c.sig_status.emit(f"{d_label} {step_mm*1000:.1f} um (step)")
-
+            c.device.MoveRelative(direction, step_mm, 60000)
+            c.sig_status.emit(f"{d_label}, {step_mm*1000:.1f} um (step)")
         except Exception as e:
             c.sig_error.emit(f"step: {e}")
 
     @Slot(str)
     def do_return(self, direction_for_log: str):
         """
-        録画終了時などに「開始位置へ戻る」処理。
-        以前の _ReturnWorker.run() を MotionWorker に統合。
+        録画終了時などに、「開始位置 (_start_mm) へ戻る」処理。
         """
         c = self._b
         prev_v = prev_a = None
@@ -881,45 +963,22 @@ class _MotionWorker(QtCore.QObject):
             RET_A_MM_S2 = 1.0
 
             try:
-                v_dev_fast = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            RET_V_MM_S,
-                        )
-                    )
-                )
-                a_dev_fast = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            RET_A_MM_S2,
-                        )
-                    )
-                )
-                c.device.set_velocity_params(0, a_dev_fast, v_dev_fast)
+                vp = VelocityParameters()
+                vp.Acceleration = _mkdec(RET_A_MM_S2)
+                vp.MaxVelocity = _mkdec(RET_V_MM_S)
+                c.device.SetVelocityParams(vp)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to set fast return speed: {ee}")
 
             if c._start_mm is not None:
                 if c.timing:
                     c.timing.log_event("RETURN_BEGIN")
-                cnt = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            c._start_mm,
-                        )
-                    )
-                )
-                c.device.move_absolute(
-                    xa_shared.TLMC_MoveModes.MoveMode_Absolute,
-                    cnt,
-                    xa_shared.TLMC_Wait.TLMC_InfiniteWait,
-                )
+                target = _mkdec(c._start_mm)
+                try:
+                    c.device.MoveTo(target, 60000)
+                except Exception:
+                    c.device.MoveTo(target)
+                c._current_mm = float(c._start_mm)
                 if c.timing:
                     c.timing.log_event("RETURN_DONE")
 
@@ -931,25 +990,10 @@ class _MotionWorker(QtCore.QObject):
         finally:
             try:
                 if prev_v is not None and c.device is not None:
-                    v_dev_orig = int(
-                        round(
-                            c.device.convert_from_physical_to_device(
-                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                                prev_v,
-                            )
-                        )
-                    )
-                    a_dev_orig = int(
-                        round(
-                            c.device.convert_from_physical_to_device(
-                                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                                prev_a,
-                            )
-                        )
-                    )
-                    c.device.set_velocity_params(0, a_dev_orig, v_dev_orig)
+                    vp = VelocityParameters()
+                    vp.Acceleration = _mkdec(prev_a)
+                    vp.MaxVelocity = _mkdec(prev_v)
+                    c.device.SetVelocityParams(vp)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed: {ee}")
 
@@ -964,4 +1008,4 @@ class _MotionWorker(QtCore.QObject):
 
 def get_backend_class():
     """StagePanel から呼ばれるファクトリ用フック。"""
-    return ThorlabsKDC101Backend
+    return ThorlabsKST101Backend
