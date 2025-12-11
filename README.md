@@ -57,15 +57,15 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 ---
 
 ## Microscope–Software Compatibility Table
-The table below summarizes the control and acquisition software supported by each descSPIM system, including shared components such as the Mission Control Center and system-specific dedicated GUIs.
+The table below summarizes the software ecosystem for each descSPIM system, specifying the role of each application (full control, camera control, stage control) and including manufacturer information for clarity.
 
-| System / Variant       | Mission Control Center | ThorCam | Kinesis | Kinesis-based Sequence Control | Nikon DS-Qi2 SDK | Micro-Manager | ImSwitch | HSI SNAPSCAN  | Custom Dedicated GUI |
-|-------------------------|------------------------|---------|---------|--------------------------------|-------------------|---------------|----------|------------------|----------------------|
-| **descSPIM-basic**      | ✔️                     | ✔️      | ✔️     | ✔️                             | –                 | ✔️            | –        | –                | ✔️                    |
-| **descSPIM-FullMoon**   | ✔️                     | –       | ✔️      | –                              | ✔️                | –             | –        | –                | –                    |
-| **descSPIM-DeepSky**    | ✔️                     | ✔️      | ✔️      | –          | –                 | –             | ✔️       | –                | –                    |
-| **descSPIM-Galaxy**     | ✔️                     | ✔️      | ✔️      | ✔️                              | –                 | ✔️            | –        | ✔️                | ✔️                   |
-| **descSPIM-SLIM**       | ✔️                     | ✔️      | ✔️      | ✔️                              | –                 | –             | –        | –                | ✔️                   |
+| System / Variant | **Mission Control Center** | **ImSwitch (KTH)** | **Custom Dedicated GUI** | **Included Softwares (with roles & manufacturers)** |
+|------------------|----------------------------|---------------------|---------------------------|------------------------------------------------------|
+| **descSPIM-basic** | Full control (stages + camera) | – | – | **ThorCam (Thorlabs, for camera)**; **Kinesis (Thorlabs, for stages)**; **Sequence Controller (Thorlabs-based integration)**; **Micro-Manager (Open source, optional)** |
+| **descSPIM-FullMoon** | Full control (stages + camera) | – | – | **Kinesis (Thorlabs, for stages)**; **NIS-Elements (Nikon, for DS-Qi2 camera)** |
+| **descSPIM-DeepSky** | Full control (stages + camera) | Camera alignment / system operation | – | **ThorCam (Thorlabs, for camera)**; **Kinesis (Thorlabs, for stages)** |
+| **descSPIM-Galaxy** | Full control (stages + camera) | – | Galaxy GUI (hyperspectral & system integration) | **ThorCam (Thorlabs, for camera)**; **Kinesis (Thorlabs, for stages)**; **Sequence Controller (Thorlabs-based integration)**; **Micro-Manager (Open source)**; **HSI SNAPSCAN (imec, for hyperspectral detector)** |
+| **descSPIM-SLIM** | Full control (stages + camera) | – | SLIM imaging GUI | **ThorCam (Thorlabs, for camera)**; **Kinesis (Thorlabs, for stages)**; **Sequence Controller (Thorlabs-based integration)** |
 
 ---
 
