@@ -102,32 +102,32 @@ camera, stage, laser, filter, galvanometric scanner.
 ## Proposed Folder Structure
 
 mcc/
-├─ gui/
-│ ├─ mainwindow.py
-│ ├─ camera_console.py
-│ ├─ stage_console.py
-│ ├─ laser_console.py
-│ ├─ filter_console.py
-│ └─ galvo_console.py
-├─ operators/
-│ ├─ camera_operator.py
-│ ├─ stage_operator.py
-│ ├─ laser_operator.py
-│ ├─ filter_operator.py
-│ └─ galvo_operator.py
-├─ backend/
-│ ├─ camera_backend.py
-│ ├─ stage_backend.py
-│ ├─ laser_backend.py
-│ ├─ filter_backend.py
-│ └─ galvo_backend.py
-├─ sdk/
-│ ├─ thorlabs/
-│ ├─ nikon/
-│ └─ wrappers/
-├─ utils/
-├─ config/
-└─ README.md
+ ├─ gui/
+ │   ├─ mainwindow.py
+ │   ├─ camera_console.py
+ │   ├─ stage_console.py
+ │   ├─ laser_console.py
+ │   ├─ filter_console.py
+ │   └─ galvo_console.py
+ ├─ operators/
+ │   ├─ camera_operator.py
+ │   ├─ stage_operator.py
+ │   ├─ laser_operator.py
+ │   ├─ filter_operator.py
+ │   └─ galvo_operator.py
+ ├─ backend/
+ │   ├─ camera_backend.py
+ │   ├─ stage_backend.py
+ │   ├─ laser_backend.py
+ │   ├─ filter_backend.py
+ │   └─ galvo_backend.py
+ ├─ sdk/
+ │   ├─ thorlabs/
+ │   ├─ nikon/
+ │   └─ wrappers/
+ ├─ utils/
+ ├─ config/
+ └─ README.md
 
 
 ---
