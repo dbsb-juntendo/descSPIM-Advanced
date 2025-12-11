@@ -59,9 +59,9 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 ## Microscope–Software Compatibility Table
 The table below summarizes the control and acquisition software supported by each descSPIM system, including shared components such as the Mission Control Center and system-specific dedicated GUIs.
 
-| System / Variant       | Mission Control Center | ThorCam | Kinesis | Kinesis-based Sequence Control | Nikon DS-Qi2 SDK | Micro-Manager | ImSwitch | SNAPSCAN (HSI) | Custom Dedicated GUI |
+| System / Variant       | Mission Control Center | ThorCam | Kinesis | Kinesis-based Sequence Control | Nikon DS-Qi2 SDK | Micro-Manager | ImSwitch | HSI SNAPSCAN  | Custom Dedicated GUI |
 |-------------------------|------------------------|---------|---------|--------------------------------|-------------------|---------------|----------|------------------|----------------------|
-| **descSPIM-basic**      | ✔️                     | –       | –       | –                              | –                 | –             | –        | –                | –                    |
+| **descSPIM-basic**      | ✔️                     | ✔️      | ✔️     | ✔️                             | –                 | ✔️            | –        | –                | ✔️                    |
 | **descSPIM-FullMoon**   | ✔️                     | –       | ✔️      | –                              | ✔️                | –             | –        | –                | –                    |
 | **descSPIM-DeepSky**    | ✔️                     | ✔️      | ✔️      | –          | –                 | –             | ✔️       | –                | –                    |
 | **descSPIM-Galaxy**     | ✔️                     | ✔️      | ✔️      | ✔️                              | –                 | ✔️            | –        | ✔️                | ✔️                   |
