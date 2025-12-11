@@ -56,7 +56,7 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 
 ---
 
-## Microscope–Software Compatibility Table
+## Control & Acquisition Software Overview
 The table below summarizes the software ecosystem for each descSPIM system, specifying the role of each application (full control, camera control, stage control) and including manufacturer information. Custom-developed modules such as system-specific GUIs and the Sequence Controller are listed in dedicated columns.
 
 | System / Variant | **Mission Control Center** | **ImSwitch** | **Custom Dedicated GUI** | **Sequence Controller (custom)** | **Included Softwares (with roles & manufacturers)** |
