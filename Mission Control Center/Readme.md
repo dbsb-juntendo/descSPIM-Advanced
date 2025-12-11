@@ -70,8 +70,8 @@ camera, stage, laser, filter, galvanometric scanner.
 | Stages | Thorlabs (Kinesis) | Multi-axis control |
 | Cameras (CMOS) | Thorlabs | Full integration |
 | Cameras (Nikon) | DS50M | Controlled through MCC SDK layer |
-| Laser Sources | Thorlabs / external trigger lasers | Full operation supported |
-| Filters | Motorized filter wheels | SDK-level and GUI control |
+| Laser Sources | Cobolt Skyra | Full operation supported |
+| Filters | Motorized filter wheels, Thorlabs | SDK-level and GUI control |
 | Galvanometric Scanners | Galvo mirrors | Supported in FullMoon configuration |
 
 ---
