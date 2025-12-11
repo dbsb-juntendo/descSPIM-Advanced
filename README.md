@@ -63,7 +63,7 @@ The table below summarizes the control and acquisition software supported by eac
 |-------------------------|------------------------|---------|---------|--------------------------------|-------------------|---------------|----------|------------------|----------------------|
 | **descSPIM-basic**      | ✔️                     | –       | –       | –                              | –                 | –             | –        | –                | –                    |
 | **descSPIM-FullMoon**   | ✔️                     | –       | ✔️      | –                              | ✔️                | –             | –        | –                | –                    |
-| **descSPIM-DeepSky**    | ✔️                     | ✔️      | ✔️      | – (not sequence-based)         | –                 | –             | ✔️       | –                | –                    |
+| **descSPIM-DeepSky**    | ✔️                     | ✔️      | ✔️      | –          | –                 | –             | ✔️       | –                | –                    |
 | **descSPIM-Galaxy**     | ✔️                     | ✔️      | ✔️      | ✔️                              | –                 | ✔️            | –        | ✔️                | ✔️                   |
 | **descSPIM-SLIM**       | ✔️                     | ✔️      | ✔️      | ✔️                              | –                 | –             | –        | –                | ✔️                   |
 
