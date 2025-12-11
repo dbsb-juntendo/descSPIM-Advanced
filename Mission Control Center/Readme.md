@@ -101,6 +101,7 @@ camera, stage, laser, filter, galvanometric scanner.
 
 ## Proposed Folder Structure
 
+```
 mcc/
  ├─ gui/
  │   ├─ mainwindow.py
@@ -128,7 +129,7 @@ mcc/
  ├─ utils/
  ├─ config/
  └─ README.md
-
+```
 
 ---
 
