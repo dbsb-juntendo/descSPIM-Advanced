@@ -6,9 +6,6 @@ A unified control framework for descSPIM-Advanced systems.
 
 ## Overview
 
-<img width="613" height="334" alt="アートボード 1" src="https://github.com/user-attachments/assets/b0efeb06-d926-4c8c-8f84-05eed967c478" />
-
-
 The **Mission Control Center (MCC)** is a modular, Python-based control system designed to operate key hardware components across the descSPIM-Advanced microscope series.  
 MCC integrates **laser sources, Thorlabs stages, Thorlabs CMOS cameras, Nikon DS50M cameras**, and other hardware elements into a unified, scalable control architecture.
 
@@ -25,7 +22,7 @@ MCC is built on:
 
 Below is the conceptual architecture of MCC, showing how GUI consoles, operators, backends, and hardware SDK layers interact.
 
-![Mission Control Center Architecture](figures/mcc_overview.png)
+<img width="613" height="334" alt="アートボード 1" src="https://github.com/user-attachments/assets/b0efeb06-d926-4c8c-8f84-05eed967c478" />
 
 ---
 
