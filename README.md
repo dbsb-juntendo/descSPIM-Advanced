@@ -62,10 +62,11 @@ The table below summarizes the software ecosystem for each descSPIM system, spec
 | System / Variant | **Mission Control Center** | **ImSwitch** | **Custom Dedicated GUI** | **Sequence Controller (custom)** | Included Softwares (with roles & manufacturers) |
 |------------------|----------------------------|--------------|---------------------------|-----------------------------------|--------------------------------------------------|
 | **descSPIM-basic** | **Full control (stages + camera)** | – | – | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages); Micro-Manager (Open-source, optional) |
-| **descSPIM-FullMoon** | **Full control (stages + camera)** | – | – | – | Kinesis (Thorlabs, for stages); NIS-Elements (Nikon, for DS50M CMOS camera) |
+| **descSPIM-FullMoon** | **Full control (stages + camera)** | – | – | – | Kinesis (Thorlabs, for stages); NIS-Elements (Nikon, for **DS50M CMOS camera**) |
 | **descSPIM-DeepSky** | **Full control (stages + camera)** | **Full control** | – | – | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages) |
 | **descSPIM-Galaxy** | **Partial support (Thorlabs CMOS cameras + stages)** | – | Galaxy GUI (hyperspectral imaging) | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages); Micro-Manager (Open-source, for stages); HSI SNAPSCAN (imec, for hyperspectral detector) |
 | **descSPIM-SLIM** | **Full control (stages + camera)** | – | SLIM imaging GUI | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages) |
+
 
 > **Note on descSPIM-Galaxy**
 >
