@@ -67,6 +67,11 @@ The table below summarizes the software ecosystem for each descSPIM system, spec
 | **descSPIM-Galaxy** | **Partial support (Thorlabs CMOS cameras + stages)** | – | Galaxy GUI (hyperspectral imaging) | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages); Micro-Manager (Open-source, for stages); HSI SNAPSCAN (imec, for hyperspectral detector) |
 | **descSPIM-SLIM** | **Full control (stages + camera)** | – | SLIM imaging GUI | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages) |
 
+> **Note on descSPIM-Galaxy**
+>
+> The Galaxy system uses two custom software modules—the **Galaxy GUI** and the **Sequence Controller**—which operate independently to support its two detection modes (the Thorlabs CMOS camera and the hyperspectral detector).  
+> Using both modules during acquisition enables ultra-multicolour imaging across complementary detection modes.
+
 ---
 
 ## Related Links
