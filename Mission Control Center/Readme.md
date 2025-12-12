@@ -22,8 +22,9 @@ MCC is built on:
 
 Below is the conceptual architecture of MCC, showing how GUI consoles, operators, backends, and hardware SDK layers interact.
 
+<img width="613" height="334" alt="アートボード 1" src="https://github.com/user-attachments/assets/2153cf1a-4812-4118-b2d8-ea5e46f27983" />
 
-<img width="613" height="334" alt="アートボード 1" src="https://github.com/user-attachments/assets/a51bfe73-4177-4c67-a954-facc05e2f3e5" />
+
 
 ---
 
