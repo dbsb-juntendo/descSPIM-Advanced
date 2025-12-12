@@ -44,7 +44,7 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 
 ---
 
-## Build & Operation Guides
+## Build & Operation Guides　（要修正）
 
 - **Optical construction and alignment**: detailed step-by-step manuals provided in the `/docs` directory  
 - **Imaging parameter optimization**: recommended exposure times, laser powers, and detection filters  
