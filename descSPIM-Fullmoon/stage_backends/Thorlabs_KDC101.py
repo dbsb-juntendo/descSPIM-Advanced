@@ -393,12 +393,13 @@ class ThorlabsKDC101Backend(IStageBackend):
             self.device = xa_shared.KDC101(
                 self.serial, "", xa_shared.TLMC_OperatingModes.Default
             )
+
             self.device.set_enable_state(
                 xa_shared.TLMC_ChannelEnableStates.ChannelEnabled
             )
 
             # 製品コード設定
-            self.device.set_connected_product(self.product_code)
+            #self.device.set_connected_product(self.product_code)
 
             # 対応製品列挙
             try:
@@ -410,6 +411,7 @@ class ThorlabsKDC101Backend(IStageBackend):
             self._connected = True
             self.sig_connected.emit(True)
             self.sig_status.emit(f"connected: {self.serial}")
+
 
         except Exception as e:
             self.sig_error.emit(f"connect_device: {e}")
