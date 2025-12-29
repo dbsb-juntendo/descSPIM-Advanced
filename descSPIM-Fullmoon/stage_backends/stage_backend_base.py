@@ -1,7 +1,12 @@
 # stage_backends/stage_backend_base.py
 # -*- coding: utf-8 -*-
-from PySide6.QtCore import QObject, Signal
+from __future__ import annotations
+
 from enum import IntEnum
+from typing import Optional
+
+from PySide6.QtCore import QObject, Signal
+
 
 """
 home() → req_home → do_home()
@@ -18,7 +23,9 @@ stop_jog() → req_stop_jog → do_stop_jog()
 
 step(direction) → req_step → do_step(direction_value)
 
-start_return(direction_for_log) → req_return → do_return(direction_for_log)
+reset_step_dda_err() → req_reset_dda → do_reset_dda()
+
+start_return() → req_return → do_return()
 
 """
 
@@ -37,19 +44,22 @@ class IStageBackend(QObject):
     """
 
     # 共通シグナル
-    sig_status = Signal(str)        # "connected", "homing..." など
-    sig_error = Signal(str)         # エラー文字列
-    sig_connected = Signal(bool)    # True = 接続完了, False = 切断
+    sig_status = Signal(str)              # "connected", "homing..." など
+    sig_error = Signal(str)               # エラー文字列
+    sig_connected = Signal(bool)          # True = 接続完了, False = 切断
     sig_startpos_updated = Signal(float)  # start 位置 [mm]
     sig_supported_products = Signal(list) # ["Z825", "Z925", ...]
+    sig_step_done = Signal()
 
-    def __init__(self, timing_logger=None, parent=None):
+    def __init__(self, timing_logger: Optional[object] = None, parent=None):
         super().__init__(parent)
         self.timing = timing_logger
-        self._connected = False
-        # serial / product_code は各 backend が適宜使う
+        self._connected: bool = False
+
+        # serial / product_code / axis_name は各 backend が適宜使う
         self.serial: str = ""
         self.product_code: str = ""
+        self.axis_name: str = "Single"
 
     # ---- StagePanel が呼ぶ最小 API セット ----
 
@@ -183,6 +193,15 @@ class IStageBackend(QObject):
             direction: StepDirection.FORWARD / StepDirection.REVERSE
         """
         raise NotImplementedError
+
+    def reset_step_dda_err(self) -> None:
+        """
+        任意:
+            Step の DDA 誤差をリセットする。
+            実装がない backend では no-op でもよい。
+        """
+        # 互換性のためデフォルト実装（no-op）
+        return
 
     def start_return(self) -> None:
         """

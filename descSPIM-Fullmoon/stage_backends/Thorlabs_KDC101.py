@@ -12,6 +12,22 @@ from PySide6.QtCore import Slot, QSettings
 
 from .internal import xa_shared
 
+# ---- for step DDA ---------------------------------------------
+from decimal import Decimal, getcontext
+getcontext().prec = 50  # 十分大きく
+
+@dataclass
+class DDA:
+    err: Decimal = Decimal("0")
+
+    def quantize_step(self, ideal_step: Decimal) -> int:
+        x = ideal_step + self.err
+        q = int(x.to_integral_value(rounding="ROUND_HALF_EVEN"))
+        self.err = x - Decimal(q)
+        return q
+
+    def reset(self) -> None:
+        self.err = Decimal("0")
 
 # ---- 設定用データクラス ---------------------------------------------
 
@@ -53,6 +69,7 @@ class ThorlabsKDC101Backend(IStageBackend):
     req_stop_jog = QtCore.Signal()
     # StepDirection は IntEnum なので Signal(int) で値を渡す
     req_step = QtCore.Signal(int)        
+    req_reset_dda = QtCore.Signal()  
     req_return = QtCore.Signal()
 
     SETTINGS_GROUP_BASE = "StageBackend/Thorlabs_KDC101"
@@ -69,6 +86,7 @@ class ThorlabsKDC101Backend(IStageBackend):
 
         self.device = None  # type: ignore[assignment]
         self._start_mm: float | None = None
+        self._start_du: int | None = None
 
         # 連続移動用の現在方向（KDC101 API の MoveDirection）
         self._move_direction = None
@@ -97,6 +115,7 @@ class ThorlabsKDC101Backend(IStageBackend):
         self.req_start_jog.connect(self._motion_worker.do_start_jog, QtCore.Qt.QueuedConnection)
         self.req_stop_jog.connect(self._motion_worker.do_stop_jog, QtCore.Qt.QueuedConnection)
         self.req_step.connect(self._motion_worker.do_step, QtCore.Qt.QueuedConnection)
+        self.req_reset_dda.connect(self._motion_worker.do_reset_dda, QtCore.Qt.QueuedConnection)
         self.req_return.connect(self._motion_worker.do_return, QtCore.Qt.QueuedConnection)
 
         self._motion_thread.start()
@@ -306,54 +325,53 @@ class ThorlabsKDC101Backend(IStageBackend):
             return False
 
         # --- 2) 接続後、実機から対応 device を列挙して選択ダイアログ ---
-        try:
-            raw = self.device.get_connected_products_supported() or []
-            products = self._normalize_products(raw)
+        #try:
+        #    raw = self.device.get_connected_products_supported() or []
+        #    products = self._normalize_products(raw)
 
-        except Exception as ee:
+        #except Exception as ee:
             # 列挙に失敗した場合は fallback として現在の product_code だけ出す
-            self.sig_status.emit(f"enumeration warning: {ee}")
-            products = [product_default or "Z825"]
+        #    self.sig_status.emit(f"enumeration warning: {ee}")
+        #    products = [product_default or "Z825"]
 
-        if not products:
-            products = [product_default or "Z825"]
+        #if not products:
+        #    products = [product_default or "Z825"]
 
-        dlg2 = QtWidgets.QDialog(parent)
-        dlg2.setWindowTitle("Thorlabs KDC101 setup (Device)")
-        layout2 = QtWidgets.QFormLayout(dlg2)
+        #dlg2 = QtWidgets.QDialog(parent)
+        #dlg2.setWindowTitle("Thorlabs KDC101 setup (Device)")
+        #layout2 = QtWidgets.QFormLayout(dlg2)
 
-        cmb_product = QtWidgets.QComboBox()
-        cmb_product.setEditable(True)
-        cmb_product.addItems(products)
+        #cmb_product = QtWidgets.QComboBox()
+        #cmb_product.setEditable(True)
+        #cmb_product.addItems(products)
 
         # 既存設定があれば優先
-        if product_default in products:
-            cmb_product.setCurrentText(product_default)
-        else:
-            cmb_product.setCurrentText(products[0])
+        #if product_default in products:
+        #    cmb_product.setCurrentText(product_default)
+        #else:
+        #    cmb_product.setCurrentText(products[0])
 
-        layout2.addRow("Device:", cmb_product)
+        #layout2.addRow("Device:", cmb_product)
 
-        buttons2 = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
-            parent=dlg2,
-        )
-        buttons2.accepted.connect(dlg2.accept)
-        buttons2.rejected.connect(dlg2.reject)
-        layout2.addRow(buttons2)
-
-        if dlg2.exec() != QtWidgets.QDialog.Accepted:
+        #buttons2 = QtWidgets.QDialogButtonBox(
+        #    QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+        #    parent=dlg2,
+        #)
+        #buttons2.accepted.connect(dlg2.accept)
+        #buttons2.rejected.connect(dlg2.reject)
+        #layout2.addRow(buttons2)
+        #if dlg2.exec() != QtWidgets.QDialog.Accepted:
             # デバイス選択をキャンセルした場合は、接続自体はされているが
             # product_code は変更せず現状維持にする
             # serial はすでに更新されているので保存しておく
-            self._save_settings()
-            return True
+        #    self._save_settings()
+        #    return True
 
-        product_code = cmb_product.currentText().strip() or products[0]
-        self.product_code = product_code
+        #product_code = cmb_product.currentText().strip() or products[0]
+        #self.product_code = product_code
 
         # デバイスに反映
-        self.set_product(product_code)
+        #self.set_product(product_code)
 
         # 設定を保存（serial / product_code / move / step）
         self._save_settings()
@@ -411,7 +429,6 @@ class ThorlabsKDC101Backend(IStageBackend):
             self._connected = True
             self.sig_connected.emit(True)
             self.sig_status.emit(f"connected: {self.serial}")
-
 
         except Exception as e:
             self.sig_error.emit(f"connect_device: {e}")
@@ -518,6 +535,7 @@ class ThorlabsKDC101Backend(IStageBackend):
             return
         try:
             c = self.device.get_position_counter(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
+            self._start_du = c
             self._start_mm = self.device.convert_from_device_units_to_physical(
                 xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance, c
             ).converted_value
@@ -574,7 +592,13 @@ class ThorlabsKDC101Backend(IStageBackend):
             return
         self.req_step.emit(int(direction))
 
-    @Slot(str)
+    def reset_step_dda_err(self) -> None:
+        if not self._connected or self.device is None:
+            self.sig_error.emit("reset_dda: not connected")
+            return
+        self.req_reset_dda.emit()
+
+    @Slot()
     def start_return(self):
         if not self._connected or self.device is None:
             self.sig_error.emit("stop return: not connected")
@@ -596,6 +620,7 @@ class _MotionWorker(QtCore.QObject):
     def __init__(self, backend: ThorlabsKDC101Backend):
         super().__init__()
         self._b = backend
+        self._dda_step = DDA()
 
     @Slot()
     def do_home(self):
@@ -620,7 +645,7 @@ class _MotionWorker(QtCore.QObject):
         if not c._connected or c.device is None:
             c.sig_error.emit("go_to_start_position: not connected")
             return
-        if c._start_mm is None:
+        if c._start_du is None:
             c.sig_error.emit("go_to_start_position: start position not registered")
             return
 
@@ -657,18 +682,18 @@ class _MotionWorker(QtCore.QObject):
                 c.sig_status.emit(f"warning: failed to set fast goto speed: {ee}")
 
             c.sig_status.emit("returning to start position...")
-            cnt = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        c._start_mm,
-                    )
-                )
-            )
+            #cnt = int(
+            #    round(
+            #        c.device.convert_from_physical_to_device(
+            #            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+            #            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+            #            c._start_mm,
+            #        )
+            #    )
+            #)
             c.device.move_absolute(
                 xa_shared.TLMC_MoveModes.MoveMode_Absolute,
-                cnt,
+                c._start_du,
                 xa_shared.TLMC_Wait.TLMC_InfiniteWait,
             )
             c.sig_status.emit("at start position.")
@@ -685,18 +710,16 @@ class _MotionWorker(QtCore.QObject):
                                 xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
                                 xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_v,
-                            )
-                        )
-                    )
+                    )))
+
                     a_dev_orig = int(
                         round(
                             c.device.convert_from_physical_to_device(
                                 xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
                                 xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
                                 prev_a,
-                            )
-                        )
-                    )
+                    )))
+                    
                     c.device.set_velocity_params(0, a_dev_orig, v_dev_orig)
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed (goto): {ee}")
@@ -789,49 +812,58 @@ class _MotionWorker(QtCore.QObject):
         try:
             direction = StepDirection(direction_value)
 
-            # --- Step size ---
+            # --- Step size (mm -> continuous DU) ---
             step_mm = c._step_mm
+            #step_du_raw = c.device.convert_from_physical_to_device(
+            #    xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+            #    xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+            #    step_mm,
+            #)
 
-            step_counts = int(
-                round(
-                    c.device.convert_from_physical_to_device(
-                        xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        step_mm,
-                    )
-                )
-            )
-            if step_counts <= 0:
-                step_counts = 1
+            step_du_raw = step_mm * 34554.9  # KDC101 Z825 の場合の換算係数（mm -> DU）
+            """ 
+            将来的に他の製品コード対応を入れる場合は、製品ごとの換算係数を管理する仕組みを入れること。
+            エンコーダ分解能：512 counts / motor rev
+            減速比：67.49 : 1
+            出力軸 1 回転あたりのカウント数：512 × 67.49 ≈ 34,554.9 counts / rev
+            """
+
+            #print(f"[_MotionWorker.do_step] step_mm={step_mm} -> step_du_raw={step_du_raw}")  # デバッグ用
+            step_du_decimal = Decimal(str(step_du_raw))             # convert の戻りが float/int/Decimal でも Decimal に統一
+            ideal_step_du = step_du_decimal if direction is StepDirection.FORWARD else -step_du_decimal            # 方向で符号を付ける（Forwardを+、Reverseを- の理想ステップにする）
+
+            # --- DDA（符号付き量子化）---
+            q = self._dda_step.quantize_step(ideal_step_du)  # q は正/負になり得る
+
+            if q == 0:
+                c.sig_error.emit("step_dda: quantized step_du became 0 (step too small)")
+                return
+
+            step_du = abs(q)  # APIには正のstep sizeを渡す前提
+            #print(f"[_MotionWorker.do_step] DDA_err={self._dda_step.err} -> q={q} -> step_du={step_du}")  # デバッグ用
 
             # --- Step 用の速度・加速度 ---
-            v_mm_s = c._step_v_mm_s
-            a_mm_s2 = c._step_a_mm_s2
-
             v_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
                         xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
                         xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        v_mm_s,
-                    )
-                )
-            )
+                        c._step_v_mm_s,
+            )))
+
             a_dev = int(
                 round(
                     c.device.convert_from_physical_to_device(
                         xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
                         xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                        a_mm_s2,
-                    )
-                )
-            )
+                        c._step_a_mm_s2,
+            )))
 
             jp = c.device.get_move_jog_params(xa_shared.TLMC_Wait.TLMC_InfiniteWait)
 
             c.device.set_move_jog_params(
                 xa_shared.TLMC_JogModes.JogMode_SingleStep,
-                step_counts,
+                step_du,
                 jp.min_velocity,
                 v_dev,
                 a_dev,
@@ -849,12 +881,26 @@ class _MotionWorker(QtCore.QObject):
                 d_label = "Reverse"
 
             c.device.move_jog(d, xa_shared.TLMC_Wait.TLMC_InfiniteWait)
-            c.sig_status.emit(f"{d_label} {step_mm*1000:.1f} um (step)")
+            c.sig_status.emit(f"{d_label} {step_mm:.4f} mm, {step_du} du step")
+            # ★ move_jog は InfiniteWait なので、ここに来た時点で step 完了している
+            c.sig_step_done.emit()
 
         except Exception as e:
             c.sig_error.emit(f"step: {e}")
 
-    @Slot(str)
+    @Slot()
+    def do_reset_dda(self):
+        c = self._b
+        if not c._connected or c.device is None:
+            c.sig_error.emit("reset_dda: not connected")
+            return
+        try:
+            self._dda_step.reset()
+            c.sig_status.emit("DDA error reset.")
+        except Exception as e:
+            c.sig_error.emit(f"reset_dda: {e}")
+
+    @Slot()
     def do_return(self):
         """
         録画終了時などに「開始位置へ戻る」処理。
@@ -900,19 +946,19 @@ class _MotionWorker(QtCore.QObject):
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to set fast return speed: {ee}")
 
-            if c._start_mm is not None:
-                cnt = int(
-                    round(
-                        c.device.convert_from_physical_to_device(
-                            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
-                            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
-                            c._start_mm,
-                        )
-                    )
-                )
+            if c._start_du is not None:
+                #cnt = int(
+                #    round(
+                #        c.device.convert_from_physical_to_device(
+                #            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+                #            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+                #            c._start_mm,
+                #        )
+                #    )
+                #)
                 c.device.move_absolute(
                     xa_shared.TLMC_MoveModes.MoveMode_Absolute,
-                    cnt,
+                    c._start_du,
                     xa_shared.TLMC_Wait.TLMC_InfiniteWait,
                 )
 

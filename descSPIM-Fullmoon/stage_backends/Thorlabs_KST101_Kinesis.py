@@ -7,7 +7,7 @@ from timing_logger import TimingLogger
 import os
 import time
 from pathlib import Path
-from contextlib import contextmanager
+#from contextlib import contextmanager
 
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import Slot, QSettings
@@ -42,21 +42,21 @@ class StageAxisConfig:
     step: StepParams = field(default_factory=StepParams)
 
 
-
-# TODO:これを遅延インポートにする
 # ---- Kinesis (.NET) 用設定 ----
 KINESIS_ROOT = r"C:\Program Files\Thorlabs\Kinesis"
 KINESIS_LIBDIR = KINESIS_ROOT  # DLL がここにある前提
 
-# DLL ディレクトリが存在する場合のみ追加（無いと FileNotFoundError になる）
-if os.path.isdir(KINESIS_LIBDIR):
-    try:
-        os.add_dll_directory(KINESIS_LIBDIR)
-    except Exception:
-        # 古い Python / Windows の場合は PATH にある前提
-        pass
-else:
-    print(f"[ThorlabsKST101Backend] warning: KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+
+## DLL ディレクトリが存在する場合のみ追加（無いと FileNotFoundError になる）
+#if os.path.isdir(KINESIS_LIBDIR):
+#    try:
+#        os.add_dll_directory(KINESIS_LIBDIR)
+#    except Exception:
+#        # 古い Python / Windows の場合は PATH にある前提
+#        pass
+#else:
+#    print(f"[ThorlabsKST101Backend] warning: KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+
 
 _KINESIS_LOADED = False
 
@@ -66,19 +66,37 @@ KCubeStepper = None
 VelocityParameters = None
 MotorDirection = None
 
+SysDecimal = None
+CultureInfo = None
 
-@contextmanager
-def pushd(p: str):
-    cur = os.getcwd()
-    os.chdir(p)
+#@contextmanager
+#def pushd(p: str):
+#    cur = os.getcwd()
+#    os.chdir(p)
+#    try:
+#        yield
+#    finally:
+#        os.chdir(cur)
+
+
+def _prepare_kinesis_runtime() -> None:
+    """
+    Kinesis DLL 検索パスの追加など、プロセスに副作用を持つ準備。
+    import 時には呼ばない（connect 時にのみ呼ぶ）。
+    """
+    if not os.path.isdir(KINESIS_LIBDIR):
+        raise RuntimeError(f"KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+
     try:
-        yield
-    finally:
-        os.chdir(cur)
+        os.add_dll_directory(KINESIS_LIBDIR)
+    except Exception:
+        # 古い Python / Windows の場合は PATH にある前提
+        pass
 
 
 def _mkdec(x):  # -> SysDecimal:
     """Decimal.Parse + InvariantCulture で Real Units(mm 等) を渡す."""
+    # ensure_kinesis_loaded 済みであることを前提にする
     return SysDecimal.Parse(str(x), CultureInfo.InvariantCulture)
 
 
@@ -93,14 +111,16 @@ def ensure_kinesis_loaded():
     if _KINESIS_LOADED:
         return
     
+    _prepare_kinesis_runtime()
+    
     import clr
     from System import Decimal as _SysDecimal
     from System.Globalization import CultureInfo as _CultureInfo
     SysDecimal = _SysDecimal
     CultureInfo = _CultureInfo
 
-    if not os.path.isdir(KINESIS_LIBDIR):
-        raise RuntimeError(f"KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
+    #if not os.path.isdir(KINESIS_LIBDIR):
+    #    raise RuntimeError(f"KINESIS_LIBDIR not found: {KINESIS_LIBDIR}")
 
     kdir = Path(KINESIS_LIBDIR)
 
@@ -115,9 +135,7 @@ def ensure_kinesis_loaded():
 
     # VelocityParameters と MotorDirection を個別に import
     try:
-        from Thorlabs.MotionControl.GenericMotorCLI.ControlParameters import (
-            VelocityParameters as _VP,
-        )
+        from Thorlabs.MotionControl.GenericMotorCLI.ControlParameters import VelocityParameters as _VP
     except Exception as e:
         raise RuntimeError(
             "VelocityParameters not found in GenericMotorCLI.ControlParameters. "
@@ -185,7 +203,7 @@ class ThorlabsKST101Backend(IStageBackend):
         self._returning = False
         # 連続移動状態フラグ
         self._continuous_moving: bool = False
-        self._connected: bool = False
+        self._connected: bool = False   # base と同じ値を明示
 
         # ---- Motion worker / thread 設定（device を触るのはここ経由）----
         self._motion_thread: QtCore.QThread | None = QtCore.QThread(self)
@@ -255,6 +273,7 @@ class ThorlabsKST101Backend(IStageBackend):
         # backend 内キャッシュに反映
         self._v_mm_s = mv.v_mm_s
         self._a_mm_s2 = mv.a_mm_s2
+        #self._update_move_direction_from_dir_index(mv.dir_index)  # 追加する？
 
         # step
         st = self._config.step
@@ -336,7 +355,7 @@ class ThorlabsKST101Backend(IStageBackend):
             vp.Acceleration = _mkdec(self._a_mm_s2)
             vp.MaxVelocity = _mkdec(self._v_mm_s)
             self.device.SetVelocityParams(vp)
-            self.sig_status.emit("movie params applied.")
+            self.sig_status.emit("move params applied.")
         except Exception as e:
             self.sig_error.emit(f"apply_move_params: {e}")
 
@@ -618,7 +637,7 @@ class ThorlabsKST101Backend(IStageBackend):
             return
         self.req_go_start.emit()
 
-    @Slot(int)
+    @Slot()
     def start_continuous(self):
         if not self._connected or self.device is None:
             self.sig_error.emit("start_continuous: not connected")
@@ -743,8 +762,8 @@ class _MotionWorker(QtCore.QObject):
             except Exception as ee:
                 c.sig_status.emit(f"warning: failed to restore speed (goto): {ee}")
 
-    @Slot(int)
-    def do_start_continuous(self, direction_index: int):
+    @Slot()
+    def do_start_continuous(self):
         c = self._b
         if not c._connected or c.device is None:
             c.sig_error.emit("start_continuous: not connected")
@@ -755,19 +774,17 @@ class _MotionWorker(QtCore.QObject):
             return
 
         try:
-            if direction_index == 0:
-                direction = MotorDirection.Forward
-                d_label = "Forward"
-            else:
-                direction = MotorDirection.Backward
-                d_label = "Backward"
+            direction = c._move_direction
+            if direction is None:
+                c.sig_error.emit("start_continuous: move direction not set")
+                return
 
             if c.timing:
                 c.timing.log_event("CONTINUOUS_BEGIN")
 
             c.device.MoveContinuous(direction)
             c._continuous_moving = True
-            c.sig_status.emit(f"continuous move started ({d_label}).")
+            c.sig_status.emit(f"continuous move started.")
         except Exception as e:
             c._continuous_moving = False
             c.sig_error.emit(f"start_continuous: {e}")
@@ -883,11 +900,12 @@ class _MotionWorker(QtCore.QObject):
         try:
             step_mm = c._step_mm
             c.device.MoveRelative(direction, step_mm, 60000)
+            c.sig_step_done.emit()
             c.sig_status.emit(f"{d_label}, {step_mm*1000:.1f} um (step)")
         except Exception as e:
             c.sig_error.emit(f"step: {e}")
 
-    @Slot(str)
+    @Slot()
     def do_return(self):
         """
         録画終了時などに、「開始位置 (_start_mm) へ戻る」処理。
