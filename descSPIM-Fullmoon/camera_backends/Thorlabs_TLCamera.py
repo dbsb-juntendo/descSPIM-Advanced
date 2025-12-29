@@ -350,6 +350,72 @@ class ThorlabsTLCameraBackend(ICameraBackend):
             except Exception as e:
                 print(f"[ThorlabsTLCameraBackend] issue_software_trigger failed: {e}")
 
+
+
+    # -------------------------------------------------
+    # stream control (STEP用: stop/resume)
+    # -------------------------------------------------
+    def stop_stream(self) -> None:
+        """
+        STEP開始時に呼ぶ想定。
+        - QTimer を止める（擬似IMAGEイベント停止）
+        - paused=True にする（pull_frame_into_buffer を止める）
+        - armed なら disarm
+        """
+        # 1) タイマー停止
+        try:
+            if self._timer.isActive():
+                self._timer.stop()
+        except Exception:
+            pass
+
+        # 2) paused フラグ
+        self._paused = True
+
+        # 3) disarm
+        if self._cam is None:
+            return
+        try:
+            if getattr(self._cam, "is_armed", False):
+                self._cam.disarm()
+                print("[ThorlabsTLCameraBackend] stop_stream: disarm done")
+        except Exception as e:
+            print(f"[ThorlabsTLCameraBackend] stop_stream: disarm failed: {e}")
+
+    def resume_stream(self) -> None:
+        """
+        STEP終了時に呼ぶ想定。
+        - arm（未armedなら）
+        - QTimer を再開（pausedは True のままにしておく：勝手にtriggerしない）
+        """
+        if self._cam is None:
+            return
+
+        # 1) arm（未armedなら）
+        try:
+            if not getattr(self._cam, "is_armed", False):
+                # start_stream と同じ設定に寄せる
+                self._cam.frames_per_trigger_zero_for_unlimited = 0
+                self._cam.image_poll_timeout_ms = 1000
+                self._cam.arm(2)
+                print("[ThorlabsTLCameraBackend] resume_stream: arm(2) done")
+        except Exception as e:
+            print(f"[ThorlabsTLCameraBackend] resume_stream: arm failed: {e}")
+            return
+
+        # 2) paused は True のまま（＝勝手にstream流さない/triggerしない）
+        self._paused = True
+
+        # 3) タイマー再開（paused=Trueなので _on_timer は何もしない）
+        try:
+            if not self._timer.isActive():
+                self._timer.start()
+                print("[ThorlabsTLCameraBackend] resume_stream: timer started (paused=True)")
+        except Exception as e:
+            print(f"[ThorlabsTLCameraBackend] resume_stream: timer start failed: {e}")
+
+
+
     # -------------------------------------------------
     # UI 初期化
     # -------------------------------------------------
