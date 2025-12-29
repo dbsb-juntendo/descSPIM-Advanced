@@ -398,6 +398,7 @@ class StageBridge(QObject):
     sig_step_done = Signal()
     sig_recording_state = Signal(bool)
     sig_step_once = Signal()
+    sig_reset_dda = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -966,6 +967,11 @@ class StagePanel(QtWidgets.QGroupBox):
         # 録画状態
         self._recording_active = False
 
+        # step完了通知
+        self._awaiting_step = False
+        self._step_done_sample = False
+        self._step_done_camera = False
+
         # Start系ボタン共通の「赤」スタイル
         self._style_running_red = (
             "QPushButton { border: 1px solid red; padding: 4px 8px; "
@@ -1224,6 +1230,7 @@ class StagePanel(QtWidgets.QGroupBox):
 
         # ★追加：録画ループからの 1 ステップ依頼
         self.bridge.sig_step_once.connect(self._on_bridge_step_once)
+        self.bridge.sig_reset_dda.connect(self._on_bridge_reset_dda)
 
         # 録画状態 → Start (test) ボタンの色
         try:
@@ -1348,8 +1355,8 @@ class StagePanel(QtWidgets.QGroupBox):
             self._on_startpos_sample_updated
         )
 
-        #backend.sig_step_done.connect(self.stage_bridge.sig_step_done)
-        #backend.sig_step_done.connect(self.bridge.sig_step_done)
+        #if hasattr(backend, "sig_step_done"):
+        backend.sig_step_done.connect(self._on_axis_step_done_sample, QtCore.Qt.QueuedConnection)
 
         self._update_groupbox_titles()
         return True
@@ -1399,8 +1406,67 @@ class StagePanel(QtWidgets.QGroupBox):
             self._on_startpos_camera_updated
         )
 
+        #if hasattr(backend, "sig_step_done"):
+        backend.sig_step_done.connect(self._on_axis_step_done_camera, QtCore.Qt.QueuedConnection)
+
         self._update_groupbox_titles()
         return True
+
+    # ---------------- Stage移動完了通知 ----------------
+    @Slot()
+    def _on_axis_step_done_sample(self):
+
+        #print(      #ステージstep完了フラグのデバッグ用
+        #    "[STAGE] axis_done: awaiting=%s sample=%s camera=%s"
+        #    % (
+        #        self._awaiting_step,
+        #        self._step_done_sample,
+        #        self._step_done_camera,
+        #))
+
+        if not self._awaiting_step:
+            return
+        self._step_done_sample = True
+        self._try_emit_step_done()
+
+    @Slot()
+    def _on_axis_step_done_camera(self):
+
+        #print(      #ステージstep完了フラグのデバッグ用
+        #    "[STAGE] axis_done: awaiting=%s sample=%s camera=%s"
+        #    % (
+        #        self._awaiting_step,
+        #        self._step_done_sample,
+        #        self._step_done_camera,
+        #))
+
+        if not self._awaiting_step:
+            return
+        self._step_done_camera = True
+        self._try_emit_step_done()
+
+    def _try_emit_step_done(self):
+        need_sample = bool(self.backend_sample and self._connected_sample)
+        need_camera = bool(self.backend_camera and self._connected_camera)
+
+        ok_sample = (not need_sample) or self._step_done_sample
+        ok_camera = (not need_camera) or self._step_done_camera
+
+        if ok_sample and ok_camera:
+            self._awaiting_step = False
+            self._step_done_sample = False
+            self._step_done_camera = False
+
+            #print(      #ステージstep完了フラグのデバッグ用
+            #    "[STAGE] step_done_emit: awaiting=%s sample=%s camera=%s"
+            #    % (
+            #        self._awaiting_step,
+            #        self._step_done_sample,
+            #        self._step_done_camera,
+            #))
+
+            self.bridge.sig_step_done.emit()
+
 
     # ---------------- 状態更新 UI ----------------
     @Slot(str)
@@ -1637,9 +1703,12 @@ class StagePanel(QtWidgets.QGroupBox):
             return
         try:
             if self.backend_sample is not None and self._connected_sample:
+                self.backend_sample.reset_step_dda_err()
                 self.backend_sample.go_to_start_position()
             if self.backend_camera is not None and self._connected_camera:
+                self.backend_camera.reset_step_dda_err()
                 self.backend_camera.go_to_start_position()
+            
         except Exception as e:
             self._set_stage_status(f"ERROR: go_to_start_position: {e}")
 
@@ -1654,6 +1723,7 @@ class StagePanel(QtWidgets.QGroupBox):
         QtWidgets.QApplication.processEvents()
 
         try:
+            self.backend_sample.reset_step_dda_err()
             self.backend_sample.home()
         finally:
             self.btn_sample_home.setText("Home")
@@ -1670,6 +1740,7 @@ class StagePanel(QtWidgets.QGroupBox):
         QtWidgets.QApplication.processEvents()
 
         try:
+            self.backend_camera.reset_step_dda_err()
             self.backend_camera.home()
         finally:
             self.btn_camera_home.setText("Home")
@@ -1679,9 +1750,6 @@ class StagePanel(QtWidgets.QGroupBox):
     def _on_sample_forward_clicked(self):
         if not (self.backend_sample and self._connected_sample):
             self.lbl_sample_status.setText("ERROR: Sample not connected")
-            return
-        if self._test_running or self._fwd_running or self._rev_running:
-            self.lbl_sample_status.setText("ERROR: stage test running")
             return
 
         # recording 中は Jog 禁止
@@ -1694,7 +1762,7 @@ class StagePanel(QtWidgets.QGroupBox):
             return
 
         if not self._sample_jog_running:
-            # Manual 用 Ctl プロファイルを適用
+            self.backend_sample.reset_step_dda_err()
             self._apply_ctl_profile_to_backend(self.sample_state, self.backend_sample, self._connected_sample)
             self.backend_sample.start_jog(0)  # 0=Forward
             self._sample_jog_running = True
@@ -1727,6 +1795,7 @@ class StagePanel(QtWidgets.QGroupBox):
             return
 
         if not self._sample_jog_running:
+            self.backend_sample.reset_step_dda_err()
             self._apply_ctl_profile_to_backend(self.sample_state, self.backend_sample, self._connected_sample)
             self.backend_sample.start_jog(1)  # 1=Reverse
             self._sample_jog_running = True
@@ -1759,6 +1828,7 @@ class StagePanel(QtWidgets.QGroupBox):
             return
 
         if not self._camera_jog_running:
+            self.backend_camera.reset_step_dda_err()
             self._apply_ctl_profile_to_backend(self.camera_state, self.backend_camera, self._connected_camera)
             self.backend_camera.start_jog(0)
             self._camera_jog_running = True
@@ -1791,6 +1861,7 @@ class StagePanel(QtWidgets.QGroupBox):
             return
 
         if not self._camera_jog_running:
+            self.backend_camera.reset_step_dda_err()
             self._apply_ctl_profile_to_backend(self.camera_state, self.backend_camera, self._connected_camera)
             self.backend_camera.start_jog(1)
             self._camera_jog_running = True
@@ -1830,6 +1901,7 @@ class StagePanel(QtWidgets.QGroupBox):
         try:
             if dev_index == 1:
                 if self.backend_sample and self._connected_sample:
+                    self.backend_sample.reset_step_dda_err()
                     self._apply_ctl_step_profile_to_backend(
                         self.sample_state, self.backend_sample, self._connected_sample
                     )
@@ -1838,6 +1910,7 @@ class StagePanel(QtWidgets.QGroupBox):
                     self._set_sample_status("ERROR: Sample not connected")
             else:
                 if self.backend_camera and self._connected_camera:
+                    self.backend_camera.reset_step_dda_err()
                     self._apply_ctl_step_profile_to_backend(
                         self.camera_state, self.backend_camera, self._connected_camera
                     )
@@ -2027,8 +2100,6 @@ class StagePanel(QtWidgets.QGroupBox):
             self.btn_startstop.setText("Start (test)")
             self.btn_startstop.setStyleSheet("")
 
-        # dir はプロファイル上は常に不変なので、ここでの復元処理は不要
-
         # 現在モードが Step のときだけ Step 用 UI を止める
         if (
             self.sample_state.acq_profile.mode == "Step"
@@ -2114,6 +2185,7 @@ class StagePanel(QtWidgets.QGroupBox):
         try:
             #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
             backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
+            backend.reset_step_dda_err()
         except Exception as e:
             if axis_state.axis_name == "Sample":
                 self._set_sample_status(f"[Sample ERROR] apply_move_params(Acq Step): {e}")
@@ -2143,13 +2215,13 @@ class StagePanel(QtWidgets.QGroupBox):
         """
         CameraPane → StageBridge → StagePanel の録画用スタート。
 
-        ・Move 録画: CameraPane が sig_stage_start を emit
+        ・Movei 録画: CameraPane が sig_stage_start を emit
             → ここで「Acq Move プロファイル」を backend に適用して
               start_continuous() を呼ぶ。
 
         ・Step 録画: CameraPane は sig_stage_start を使わず、
             フレームごとに sig_step_once() を emit する。
-            → その場合、このスロットは呼ばれない。
+            → このスロットは呼ばれない。
         """
         print("[StagePanel] _on_bridge_stage_start: received stage_start")
 
@@ -2171,6 +2243,33 @@ class StagePanel(QtWidgets.QGroupBox):
                 self.backend_camera.start_continuous()
         except Exception as e:
             self._set_stage_status(f"ERROR: start_continuous: {e}")
+
+    """
+    # 撮影を途中で止めた時にフリーズするなら、これを入れる
+    def _clear_step_wait(self, emit_done: bool = False):
+        # 既に待っていないなら何もしない（多重呼び出し耐性）
+        if not getattr(self, "_awaiting_step", False):
+            return
+
+        self._awaiting_step = False
+        self._step_done_sample = False
+        self._step_done_camera = False
+
+        # もし step 完了待ちタイマを持っているなら止める
+        #t = getattr(self, "_step_timeout_timer", None)
+        #if t is not None:
+        #    try:
+        #        t.stop()
+        #    except Exception:
+        #        pass
+
+        # 中断時は「完了通知が来ない」ので待ちを解放する
+        if emit_done:
+            try:
+                self.sig_step_done.emit()
+            except Exception:
+                pass
+    """
 
     @Slot(int, int)
     def _on_bridge_stage_stop(self, link_mode: int, stop_mode: int):
@@ -2218,6 +2317,7 @@ class StagePanel(QtWidgets.QGroupBox):
                 elif link_mode_enum == StageLinkMode.STEP:
                     # STEP では stop_only は呼ばない
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
+                        backend.reset_step_dda_err()
                         backend.start_return()
                         print("[StagePanel] sample: STEP + return")
                     else:
@@ -2237,6 +2337,7 @@ class StagePanel(QtWidgets.QGroupBox):
 
                 elif link_mode_enum == StageLinkMode.STEP:
                     if stop_mode_enum == StageStopMode.STOP_AND_RETURN:
+                        backend.reset_step_dda_err()
                         backend.start_return()
                         print("[StagePanel] camera: STEP + return")
                     else:
@@ -2361,8 +2462,6 @@ class StagePanel(QtWidgets.QGroupBox):
             else:
                 self._set_camera_status(f"[Camera ERROR] apply_move_params(Ctl Move): {e}")
 
-
-
     def _apply_ctl_step_profile_to_backend(
         self,
         axis_state: AxisState,
@@ -2407,16 +2506,45 @@ class StagePanel(QtWidgets.QGroupBox):
     def _on_bridge_step_once(self):
         """
         録画ループ（CaptureWorker 等）から呼ばれる「1 ステップだけ」動作。
-        Acq Profile が Step モードの両軸に対して _do_acq_step_once() を実行。
         """
         if not self._connected:
             return
         try:
+            self._awaiting_step = True
+            #print(f"[STAGE] step_start: awaiting={self._awaiting_step}")    # ステージstep完了フラグのデバック用
+            self._step_done_sample = False
+            self._step_done_camera = False
             self._do_acq_step_once(reverse=False)
         except Exception as e:
+            self._awaiting_step = False
+            self._step_done_sample = False
+            self._step_done_camera = False
             self._set_stage_status(f"ERROR: step_once: {e}")
 
+    @Slot()
+    def _on_bridge_reset_dda(self):
+        """
+        録画ループ（CaptureWorker 等）から呼ばれる「DDA リセット」。
+        """
+        if not self._connected:
+            return
+        try:
+            self._do_reset_dda()
+        except Exception as e:
+            self._set_stage_status(f"ERROR: reset_dda: {e}")
 
+    def _do_reset_dda(self):
+        """
+        step モード用の DDA リセットを両軸に対して実行。
+        """
 
+        def _reset_dda_axis(backend: Optional[IStageBackend],
+                       connected: bool):
+            if not (backend and connected):
+                return
 
+            backend.reset_step_dda_err()
+
+        _reset_dda_axis(self.backend_sample, self._connected_sample)
+        _reset_dda_axis(self.backend_camera, self._connected_camera)    
 
