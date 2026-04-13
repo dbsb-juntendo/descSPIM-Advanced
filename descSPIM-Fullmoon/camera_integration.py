@@ -29,7 +29,7 @@ import numpy as np
 from PySide6.QtWidgets import (
     QWidget, QFormLayout, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QSizePolicy,
     QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QProgressDialog, QFileDialog,
-    QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsPixmapItem, QGridLayout, QApplication, QGroupBox
+    QGraphicsView, QGraphicsScene, QGraphicsRectItem, QGraphicsPixmapItem, QGridLayout, QApplication, QGroupBox, QDialog, QLineEdit
 )
 import tifffile
 from ctypes import c_int, c_uint, c_ushort, c_void_p, byref, wintypes
@@ -38,6 +38,8 @@ from ctypes import c_int, c_uint, c_ushort, c_void_p, byref, wintypes
 import importlib
 import pkgutil
 import pathlib
+
+import json
 
 BACKEND_MODULE_DIR = pathlib.Path(__file__).parent / "camera_backends"
 
@@ -364,6 +366,14 @@ class CaptureWorker(QObject):
         # ★ 追加: ステージ連動フラグ（デフォルト ON）
         self._link_stage = True
 
+        # STEP多色用
+        self._step_program: list[dict] = []
+        self._color_index: int = 0
+        self._completed_steps: int = 0
+
+        #self._ram_frames_by_color: dict[str, list[np.ndarray]] = {}
+        #self._meta_by_color: dict[str, list[dict]] = {}
+
     #----------------
     # 1. 前提：状態フラグをセットするメソッド群
     #----------------
@@ -490,6 +500,36 @@ class CaptureWorker(QObject):
         #except Exception:
         #    pass
 
+    # STEPモードの開始は、ステッププログラムを引数で受け取るようにする
+    @Slot()
+    def stop_recording_ram(self):
+        total_frames = len(self._ram_frames)
+
+        print(
+            f"[CaptureWorker] stop_recording_ram: "
+            f"recording={self._recording}, n_frames={total_frames}"
+        )
+
+        if not self._recording:
+            return
+
+        self._recording = False
+        self._step_waiting = False
+        self._step_inflight = False
+
+        try:
+            self._laser_all_off()
+        except Exception:
+            pass
+
+        gb = self._ram_bytes / (1024**3)
+        self.sig_record_status.emit(
+            f"Stopped. RAM buffered: {total_frames} frames, {gb:.2f} GB"
+        )
+        self.sig_recording_stopped.emit()
+
+
+    """
     @Slot()
     def start_recording_ram_step(self):
         print(f"[CaptureWorker] start_recording_step_mode")   # デバッグ用
@@ -514,7 +554,7 @@ class CaptureWorker(QObject):
         # ★最初のstepを出す（以後は step_done → 100ms → capture → next step）
         self._emit_step_once()
 
-    """
+
     def _do_one_step(self):
         try:
             # ここで do_capture_snapshot() の戻り値を受け取る
@@ -582,7 +622,7 @@ class CaptureWorker(QObject):
             return  # 停止したら終了
         self._do_one_step()  # ← 1 フレーム + 1 ステップの関数
         QTimer.singleShot(0, self._step_loop)        # 次の step を Qt のイベントループにスケジュール
-    """
+
 
     @Slot()
     def on_stage_step_done(self):
@@ -594,6 +634,7 @@ class CaptureWorker(QObject):
 
         # 完了後 100ms 待ってから撮影
         QTimer.singleShot(100, self._capture_after_step_done)
+
 
     def _capture_after_step_done(self):
         if not self._recording:
@@ -656,6 +697,214 @@ class CaptureWorker(QObject):
 
         self._schedule_next_step()
 
+    """
+
+    @Slot(object)
+    def start_recording_ram_step(self, step_program):
+        print("[CaptureWorker] start_recording_step_mode")
+        if self._recording:
+            return
+
+        if not step_program:
+            self.sig_record_status.emit("STEP program is empty.")
+            return
+
+        self._dtype = np.uint8 if self._bits == 8 else np.uint16
+        self._step_program = list(step_program)
+        self._color_index = 0
+        self._completed_steps = 0
+
+        self._ram_frames.clear()
+        self._meta.clear()
+        self._ram_bytes = 0
+        self._last_seq = None
+        self._t0_wall_ns = time.time_ns()
+        self._t0_mono_ns = time.perf_counter_ns()
+        self._recording = True
+
+        self.main.stage_bridge.sig_reset_dda.emit()
+        self._step_waiting = False
+        self._step_inflight = False
+
+        self.sig_record_status.emit("Recording to RAM...")
+        #self._emit_step_once() 
+        self._step_waiting = False
+        self._step_inflight = False
+        self._color_index = 0
+
+        self._laser_all_off()
+
+        QTimer.singleShot(0, self._run_next_color_in_step)
+
+    # ステップ完了のシグナルを受け取ったときの処理。ステップ録画モードでなければ無視。完了後 100ms 待ってから撮影を行う。
+    @Slot()
+    def on_stage_step_done(self):
+        if not self._recording or not self._step_waiting:
+            return
+
+        self._step_waiting = False
+        self._color_index = 0
+
+        QTimer.singleShot(100, self._run_next_color_in_step)
+
+    def _run_next_color_in_step(self):
+        if not self._recording:
+            return
+
+        if self._color_index >= len(self._step_program):
+            self._completed_steps += 1
+
+            if self._auto_stop_enabled and self._auto_stop_frames > 0:
+                if self._completed_steps >= self._auto_stop_frames:
+                    msg = f"Reached {self._auto_stop_frames} steps. Auto-stopped."
+                    self.sig_record_status.emit(msg)
+                    self.sig_autostop.emit(msg)
+                    self.stop_recording_ram()
+                    return
+
+            self._schedule_next_step()
+            return
+
+        cfg = self._step_program[self._color_index]
+
+        try:
+            self._apply_filter_and_laser(cfg)
+            delay_ms = int(cfg.get("switch_delay_ms", 50))
+            QTimer.singleShot(delay_ms, self._capture_current_color)
+        except Exception as e:
+            print(f"[CaptureWorker] _run_next_color_in_step error: {e}")
+            self.stop_recording_ram()
+
+    def _capture_current_color(self):
+        if not self._recording:
+            return
+
+        cfg = self._step_program[self._color_index]
+        laser = cfg["laser"]
+        #color_name = cfg["name"]   # 未使用？
+
+        try:
+            snapshot = self.do_capture_snapshot()
+            #self._laser_all_off()
+
+            if snapshot is None:
+                print("[CaptureWorker] snapshot was None")
+                self._laser_all_off()
+                self._color_index += 1
+                QTimer.singleShot(0, self._run_next_color_in_step)
+                return
+
+            data   = snapshot["data"]
+            seq    = snapshot["seq"]
+            ts_us  = snapshot["ts_us"]
+            exp_us = snapshot["exp_us"]
+            host_ns = time.perf_counter_ns()
+
+            arr = np.frombuffer(data, dtype=self._dtype).reshape(self._h, self._w).copy()
+
+            self._ram_frames.append(arr)
+            self._ram_bytes += arr.nbytes
+
+            if self._t0_wall_ns is not None and self._t0_mono_ns is not None:
+                wall_ns = self._t0_wall_ns + (host_ns - self._t0_mono_ns)
+            else:
+                wall_ns = time.time_ns()
+
+            self._meta.append((seq, ts_us, host_ns, wall_ns, exp_us))
+
+            """
+            self._ram_frames_by_color[color_name].append(arr)
+            self._ram_bytes += arr.nbytes
+
+            if self._t0_wall_ns is not None and self._t0_mono_ns is not None:
+                wall_ns = self._t0_wall_ns + (host_ns - self._t0_mono_ns)
+            else:
+                wall_ns = time.time_ns()
+
+            self._meta_by_color[color_name].append({
+                "seq": seq,
+                "ts_us": ts_us,
+                "host_ns": host_ns,
+                "wall_ns": wall_ns,
+                "exp_us": exp_us,
+                "step_index": self._completed_steps,
+                "color_index": self._color_index,
+                "color_name": color_name,
+                "laser": cfg["laser"],
+                "filter": cfg["filter"],
+            })
+            """
+
+            if self._ram_bytes > self._ram_limit:
+                msg = f"RAM limit reached ({self._ram_bytes/(1024**3):.2f} GB). Auto-stopped."
+                self.sig_record_status.emit(msg)
+                self.sig_autostop.emit(msg)
+                self.stop_recording_ram()
+                return
+
+        except Exception as e:
+            try:
+                self._laser_all_off()
+            except Exception:
+                pass
+            print(f"[CaptureWorker] _capture_current_color error: {e}")
+            self.stop_recording_ram()
+            return
+
+        #self._laser_all_off()
+
+        main = self.main.window()
+        main.laser_pane.turn_off_line(
+            backend_name=laser["backend_name"],
+            connection_key=laser["connection_key"],
+            line_id=laser["line_id"],
+        )
+
+        self._color_index += 1
+        QTimer.singleShot(0, self._run_next_color_in_step)
+
+
+    # STEP多色モードで、現在のステップの次の色に切り替えるときに呼ぶ。main の pane helper を呼び出してフィルターとレーザーを切り替える。
+    def _apply_filter_and_laser(self, cfg: dict):
+        pane = getattr(self, "main", None)
+        if pane is None:
+            raise RuntimeError("main is not set")
+
+        main = pane.window()
+        if main is None:
+            raise RuntimeError("MainWindow not found")
+
+        #self._laser_all_off()  # 二重になってるのでここはやめる
+
+        if not hasattr(main.laser_pane, "turn_on_line"):
+            raise RuntimeError("laser_pane.turn_on_line() is not implemented yet")
+        laser = cfg["laser"]
+        main.laser_pane.turn_on_line(
+            backend_name=laser["backend_name"],
+            connection_key=laser["connection_key"],
+            line_id=laser["line_id"],
+        )
+
+        if not hasattr(main.filter_pane, "set_filter_by_label"):
+            raise RuntimeError("filter_pane.set_filter_by_label() is not implemented yet")
+        main.filter_pane.set_filter_by_label(cfg["filter"])
+
+
+    def _laser_all_off(self):
+        pane = getattr(self, "main", None)
+        if pane is None:
+            return
+
+        main = pane.window()
+        if main is None:
+            return
+
+        if hasattr(main.laser_pane, "turn_off_all_lines"):
+            main.laser_pane.turn_off_all_lines()
+
+
+
+
     def _schedule_next_step(self):
         if not self._recording:
             return
@@ -676,7 +925,7 @@ class CaptureWorker(QObject):
             # stage側で永遠に完了しない場合の保険を入れるならここでタイムアウトを仕込む
             self._step_inflight = False
 
-
+    """
     @Slot()
     def stop_recording_ram(self):
         print(f"[CaptureWorker] stop_recording_ram: recording={self._recording}, n_frames={len(self._ram_frames)}")    #デバッグ用
@@ -698,6 +947,37 @@ class CaptureWorker(QObject):
         self.sig_record_status.emit(f"Stopped. RAM buffered: {n} frames, {gb:.2f} GB")
         self.sig_recording_stopped.emit()
         #self._io_set_output(False)  # 録画終了=外部出力OFF
+
+
+    # multi color step recordingに対応した stop_recording_ram
+    @Slot()
+    def stop_recording_ram(self):
+        total_frames = len(self._ram_frames)
+
+        print(
+            f"[CaptureWorker] stop_recording_ram: "
+            f"recording={self._recording}, n_frames={total_frames}"
+        )
+
+        if not self._recording:
+            return
+
+        self._recording = False
+        self._step_waiting = False
+        self._step_inflight = False
+
+        try:
+            self._laser_all_off()
+        except Exception:
+            pass
+
+        gb = self._ram_bytes / (1024**3)
+        self.sig_record_status.emit(
+            f"Stopped. RAM buffered: {total_frames} frames, {gb:.2f} GB"
+        )
+        self.sig_recording_stopped.emit()
+        """
+
 
     # -----
     #3. フレーム受信処理 on_image_event() と録画・自動停止・ステップ走査
@@ -809,6 +1089,144 @@ class CaptureWorker(QObject):
             except Exception as e:
                 print(f"[CaptureWorker] backend.set_paused(False) error in reconfigure: {e}")
 
+#==== STEP-scan 関連のダイアログ =====
+class StepColorCountDialog(QDialog):
+    def __init__(self, max_colors: int, parent=None, initial_value: int = 1):
+        super().__init__(parent)
+        self.setWindowTitle("STEP multicolor setup")
+
+        self.spin = QSpinBox(self)
+        self.spin.setRange(1, max(1, max_colors))
+        #self.spin.setValue(1)
+        self.spin.setValue(max(1, min(int(initial_value), max_colors)))
+
+        btn_ok = QPushButton("OK", self)
+        btn_cancel = QPushButton("Cancel", self)
+
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("How many colors do you want to capture per step?"))
+        lay.addWidget(self.spin)
+
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(btn_ok)
+        row.addWidget(btn_cancel)
+        lay.addLayout(row)
+
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel.clicked.connect(self.reject)
+
+    def get_value(self) -> int | None:
+        if self.exec() != QDialog.Accepted:
+            return None
+        return int(self.spin.value())
+
+#==== STEP-scan 関連のダイアログ =====
+class StepColorProgramDialog(QDialog):
+    def __init__(self, n_colors: int, laser_choices: list[dict], filter_choices: list[str], parent=None, initial_program: list[dict] | None = None):
+        super().__init__(parent)
+        self.setWindowTitle("STEP multicolor program")
+
+        self._rows = []
+        initial_program = initial_program or []
+
+        lay = QVBoxLayout(self)
+        lay.addWidget(QLabel("Select laser / filter for each color."))
+
+        grid = QGridLayout()
+        grid.addWidget(QLabel("Name"), 0, 0)
+        grid.addWidget(QLabel("Laser"), 0, 1)
+        grid.addWidget(QLabel("Filter"), 0, 2)
+        grid.addWidget(QLabel("Delay (ms)"), 0, 3)
+
+
+        for i in range(n_colors):
+            init = initial_program[i] if i < len(initial_program) else {}
+
+            cmb_laser = QComboBox(self)
+            laser_index = 0
+            for j, choice in enumerate(laser_choices):
+                cmb_laser.addItem(choice["label"], choice)
+                init_laser = init.get("laser", {})
+                if (
+                    choice.get("backend_name") == init_laser.get("backend_name")
+                    and choice.get("connection_key") == init_laser.get("connection_key")
+                    and choice.get("line_id") == init_laser.get("line_id")
+                ):
+                    laser_index = j
+            cmb_laser.setCurrentIndex(laser_index)
+
+            cmb_filter = QComboBox(self)
+            filter_index = 0
+            for j, name in enumerate(filter_choices):
+                cmb_filter.addItem(name, name)
+                if name == init.get("filter"):
+                    filter_index = j
+            cmb_filter.setCurrentIndex(filter_index)
+
+            #cmb_name = QComboBox(self)
+            #cmb_name.setEditable(True)
+            #cmb_name.addItem(init.get("name", f"Color{i+1}"))
+            #cmb_name.setCurrentText(init.get("name", f"Color{i+1}"))
+
+            name_edit = QLineEdit(self)
+            name_edit.setText(init.get("name", f"Color{i+1}"))
+
+            spin_delay = QSpinBox(self)
+            spin_delay.setRange(0, 5000)
+            spin_delay.setValue(int(init.get("switch_delay_ms", 50)))
+
+            #grid.addWidget(cmb_name, i + 1, 0)
+            grid.addWidget(name_edit, i + 1, 0)
+            grid.addWidget(cmb_laser, i + 1, 1)
+            grid.addWidget(cmb_filter, i + 1, 2)
+            grid.addWidget(spin_delay, i + 1, 3)
+
+            #self._rows.append((cmb_name, cmb_laser, cmb_filter, spin_delay))
+            self._rows.append((name_edit, cmb_laser, cmb_filter, spin_delay))
+
+        lay.addLayout(grid)
+
+        btn_ok = QPushButton("OK", self)
+        btn_cancel = QPushButton("Cancel", self)
+
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(btn_ok)
+        row.addWidget(btn_cancel)
+        lay.addLayout(row)
+
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel.clicked.connect(self.reject)
+
+    def get_program(self) -> list[dict] | None:
+        if self.exec() != QDialog.Accepted:
+            return None
+
+        out = []
+        seen = set()
+
+        #for cmb_name, cmb_laser, cmb_filter, spin_delay in self._rows:
+        #    color_name = cmb_name.currentText().strip() or "Color"
+        for name_edit, cmb_laser, cmb_filter, spin_delay in self._rows:
+            color_name = name_edit.text().strip() or "Color"
+            laser_choice = cmb_laser.currentData()
+            filter_name = cmb_filter.currentData()
+            delay_ms = int(spin_delay.value())
+
+            key = (laser_choice["backend_name"], laser_choice["connection_key"], laser_choice["line_id"], filter_name)
+            if key in seen:
+                raise ValueError(f"Duplicated laser/filter pair: {laser_choice['label']} + {filter_name}")
+            seen.add(key)
+
+            out.append({
+                "name": color_name,
+                "laser": laser_choice,
+                "filter": filter_name,
+                "switch_delay_ms": delay_ms,
+            })
+
+        return out
 
 
 class CameraPane(QWidget):
@@ -819,7 +1237,10 @@ class CameraPane(QWidget):
     req_record_arm = Signal(bool)
     req_record_start_ram = Signal()
     req_record_start_ram_continuous = Signal()
-    req_record_start_ram_step = Signal()
+
+    #req_record_start_ram_step = Signal()
+    req_record_start_ram_step = Signal(object)
+
     req_record_stop_ram = Signal()
     req_set_autostop = Signal(bool, int)
     req_capture_snapshot = Signal()
@@ -1064,7 +1485,7 @@ class CameraPane(QWidget):
         self.cmb_stage_mode = QComboBox()
         self.cmb_stage_mode.addItem("OFF",               StageLinkMode.STAGE_OFF)
         self.cmb_stage_mode.addItem("MOVIE-scan",        StageLinkMode.MOVE_CONTINUOUS)
-        self.cmb_stage_mode.addItem("Step",              StageLinkMode.STEP)
+        self.cmb_stage_mode.addItem("STEP-scan",              StageLinkMode.STEP)
         self._stage_link_mode = StageLinkMode.STAGE_OFF
 
         row_stage_mode = QHBoxLayout()
@@ -1781,6 +2202,61 @@ class CameraPane(QWidget):
     # 録画 / Auto-stop / TIFF 保存
     # ==============================
 
+    # 録画開始前の STEP モードで、レーザーフィルタの組み合わせをユーザーに選ばせるダイアログを出す
+    def _show_step_multicolor_dialog(self):
+        main = self.window()
+
+        laser_pane = getattr(main, "laser_pane", None)
+        filter_pane = getattr(main, "filter_pane", None)
+
+        if laser_pane is None or filter_pane is None:
+            raise RuntimeError("laser_pane or filter_pane not found")
+
+        laser_choices = laser_pane.get_line_choices()
+        filter_choices = filter_pane.get_filter_choices()
+
+        if not laser_choices:
+            raise RuntimeError("No connected laser lines available")
+        if not filter_choices:
+            raise RuntimeError("No connected filters available")
+
+        last_n = int(self._settings.value("step_multicolor/n_colors", 1))
+
+        #dlg1 = StepColorCountDialog(max_colors=len(laser_choices), parent=self)
+
+        dlg1 = StepColorCountDialog(
+            max_colors=len(laser_choices),
+            parent=self,
+            initial_value=last_n,
+        )
+
+        n_colors = dlg1.get_value()
+        if n_colors is None:
+            return None
+
+        raw = self._settings.value("step_multicolor/program_json", "", type=str)
+        try:
+            last_program = json.loads(raw) if raw else []
+        except Exception:
+            last_program = []
+
+        dlg2 = StepColorProgramDialog(
+            n_colors=n_colors,
+            laser_choices=laser_choices,
+            filter_choices=filter_choices,
+            parent=self,
+            initial_program=last_program,
+        )
+        #return dlg2.get_program()
+
+        program = dlg2.get_program()
+        if not program:
+            return None
+
+        self._settings.setValue("step_multicolor/n_colors", n_colors)
+        self._settings.setValue("step_multicolor/program_json", json.dumps(program, ensure_ascii=False))
+        return program
+
     @Slot()
     def on_click_record(self):
         # 現在のステージモードを取得（なければ STAGE_OFF 扱い）
@@ -1818,6 +2294,7 @@ class CameraPane(QWidget):
                 except Exception:
                     pass
 
+                """
             elif mode == StageLinkMode.STEP:
                 try:
                     # STEP開始前にストリームを止める（混入防止）
@@ -1833,6 +2310,37 @@ class CameraPane(QWidget):
                     self.req_record_start_ram_step.emit()    # step recording startをworkerに投げる
                 except Exception:
                     pass
+                """
+
+            elif mode == StageLinkMode.STEP:
+                try:
+                    # STEP開始前にストリームを止める
+                    backend = getattr(self, "backend", None)
+                    if backend is not None and hasattr(backend, "stop_stream"):
+                        backend.stop_stream()
+
+                    if not self._paused:
+                        self.set_paused(True)
+                        self.btn_toggle.setStyleSheet("")
+
+                    program = self._show_step_multicolor_dialog()
+                    if not program:
+                        # キャンセル時は録画開始UIを元に戻す
+                        self._is_recording = False
+                        self.btn_record.setText("Start Recording")
+                        self.btn_record.setStyleSheet("")
+                        return
+
+                    self.stage_bridge.sig_recording_state.emit(True)
+                    self.req_record_start_ram_step.emit(program)
+
+                except Exception as e:
+                    print(f"[CameraPane] STEP start error: {e}")
+                    self._is_recording = False
+                    self.btn_record.setText("Start Recording")
+                    self.btn_record.setStyleSheet("")
+
+
 
         else:
             #try:        #ステージstep完了フラグのデバッグ用

@@ -339,6 +339,34 @@ class LaserPane(QtWidgets.QGroupBox):
                     wls.append(wl)
         return wls
 
+    #--- STEP撮影のダイアログ用の選択肢リスト ----
+    def get_line_choices(self) -> list[dict]:
+        """
+        ダイアログ用。
+        レーザーボタン表示と同じ文字列を返す。
+        """
+        choices: list[dict] = []
+
+        for entry in self._devices:
+            for line in entry.lines:
+                line_id = str(line.get("id"))
+                wl = line.get("wavelength_nm")
+                name = line.get("name") or (f"{wl} nm" if wl is not None else line_id)
+                dev_label = f"{entry.backend_name} ({entry.connection_key})"
+                label = f"{dev_label} / {name}"
+
+                choices.append({
+                    "label": label,               # ダイアログ表示用
+                    "line_id": line_id,           # 実行用
+                    "backend_name": entry.backend_name,
+                    "connection_key": entry.connection_key,
+                    "name": name,
+                    "wavelength_nm": wl,
+                })
+
+        return choices
+
+
     # ---- connect 処理 ----
     def _on_connect_clicked(self):
         idx = self.cmb_backend.currentIndex()
@@ -471,3 +499,45 @@ class LaserPane(QtWidgets.QGroupBox):
         self._used_keys.clear()
         self._clear_line_controls()
         self._set_status("Shutdown.")
+
+    # STEP撮影のダイアログから呼ぶための helper。指定した line を ON にする。
+    def turn_on_line(self, backend_name: str, connection_key: str, line_id: str):
+        for entry in self._devices:
+            if entry.backend_name == backend_name and entry.connection_key == connection_key:
+                try:
+                    entry.backend.set_enabled(str(line_id), True)
+                    return
+                except Exception as e:
+                    raise RuntimeError(f"turn_on_line failed: {e}")
+
+        raise RuntimeError(
+            f"Laser line not found: {backend_name} / {connection_key} / {line_id}"
+        )
+
+
+    # STEP撮影のダイアログから呼ぶための helper。指定した line を OFF にする。
+    def turn_off_line(self, backend_name: str, connection_key: str, line_id: str):
+        for entry in self._devices:
+            if entry.backend_name == backend_name and entry.connection_key == connection_key:
+                try:
+                    entry.backend.set_enabled(str(line_id), False)
+                    return
+                except Exception as e:
+                    raise RuntimeError(f"turn_off_line failed: {e}")
+
+        raise RuntimeError(
+            f"Laser line not found: {backend_name} / {connection_key} / {line_id}"
+        )
+
+
+    def turn_off_all_lines(self):
+        errs = []
+        for entry in self._devices:
+            for line in entry.lines:
+                try:
+                    entry.backend.set_enabled(str(line.get("id")), False)
+                except Exception as e:
+                    errs.append(str(e))
+
+        if errs:
+            raise RuntimeError(" / ".join(errs))

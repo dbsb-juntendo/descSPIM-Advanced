@@ -788,7 +788,8 @@ class FilterPane(QtWidgets.QGroupBox):
     # Backend 接続 / Slot 名ダイアログ
     # --------------------------------------------------------
     def _on_connect_clicked(self):
-        # 既に接続済み → disconnect
+
+        # 既に接続済み → disconnect処理
         if self.backend is not None:
             try:
                 self.backend.emergency_shutdown()
@@ -1093,6 +1094,16 @@ class FilterPane(QtWidgets.QGroupBox):
                 pass
             self.backend = None
 
+
+    # STEP撮影ダイアログ用
+    def get_filter_choices(self) -> list[str]:
+        """
+        ダイアログ用。
+        現在接続されているフィルター名一覧を返す。
+        """
+        return list(self._wavelengths)
+
+
     # --------------------------------------------------------
     # Status helper / Controller メッセージ集約
     # --------------------------------------------------------
@@ -1114,3 +1125,18 @@ class FilterPane(QtWidgets.QGroupBox):
     def _set_error_text(self, msg: str):
         self.lbl_status.setText(f"Status: [ERROR] {msg}")
         self.sig_error.emit(msg)
+
+
+    # STEP撮影時のフィルター変更用 API　（main.py から呼ばれる）
+    def set_filter_by_label(self, label: str):
+        if self.backend is None:
+            raise RuntimeError("Filter backend is not connected")
+
+        slot = self._label_to_slot.get(label)
+        if slot is None:
+            raise RuntimeError(f"Unknown filter label: {label}")
+
+        try:
+            self.backend.set_position(int(slot))
+        except Exception as e:
+            raise RuntimeError(f"set_position error: {e}")
