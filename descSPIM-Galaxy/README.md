@@ -1,6 +1,14 @@
 # descSPIM-Galaxy
 
-descSPIM-Galaxy: Python Control and Image Processing Instructions
+## Manuals
+
+Please first refer to **descSPIM-Galaxy Manual: Construction, Operation, and Sample Preparation** for the overall system setup, operation, and sample preparation workflow.
+
+You may then proceed to **descSPIM-Galaxy: Python Control and Image Processing Instructions** for software control and downstream image processing.
+
+Please note that **partial control of this model is possible using the Mission Control Center (MCC) GUI**. However, for **high-end imaging with the hyperspectral camera**, **descSPIM-Galaxy: Python Control and Image Processing Instructions** is required.
+
+## descSPIM-Galaxy: Python Control and Image Processing Instructions
 
 ## File Overview
 - **Snapscan_Multiex_3D_GUI.py** — Controls hyperspectral 3D acquisition using imec HSI Snapscan and synchronizes sample/camera stages.  
