@@ -1,8 +1,12 @@
 # descSPIM-SLIM
 
-descSPIM-SLIM: Python Control Installation Instructions  
+Please note that **full control and imaging of this model are available through the Mission Control Center (MCC)**.  
+This document provides a manual for the **simplest Python-based imaging workflow**.  
+For **more reproducible image acquisition**, we recommend using **MCC**.
 
-## File Overview
+## descSPIM-SLIM: Python Control Installation Instructions  
+
+### File Overview
 - **251109_descSPIM-SLIM_Python Control GUI.ipynb** — Main notebook for controlling descSPIM-SLIM via Python on Windows 11.  
 - **Homing Cell** — Connects to KST201 controllers, initializes environment, and performs stage homing.  
 - **ThorCam Configuration** — Describes camera setup (exposure 300 ms, continuous mode, trigger off).  
