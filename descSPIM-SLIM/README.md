@@ -1,3 +1,5 @@
+Please first refer to **descSPIM_SLIM_construction_manual.pdf**, which provides an overview of the construction procedure and overall hardware setup.
+
 # descSPIM-SLIM
 
 Please note that **full control and imaging of this model are available through the Mission Control Center (MCC)**.  
