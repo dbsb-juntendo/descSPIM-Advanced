@@ -45,9 +45,9 @@ Each configuration includes step-by-step protocols for construction, alignment, 
 
 ---
 
-## Build & Operation Guides　（要修正）
+## Build & Operation Guides
 
-- **Optical construction and alignment**: detailed step-by-step manuals provided in the `/docs` directory  
+- **Optical construction and alignment**: detailed step-by-step manuals are provided within each model-specific directory  
 - **Imaging parameter optimization**: recommended exposure times, laser powers, and detection filters  
 - **Post-acquisition processing**: registration, stitching, and multicolor alignment (Python/ANTs-based workflows)
 
@@ -84,7 +84,7 @@ The table below summarizes the software ecosystem for each descSPIM system, spec
 
 ---
 
-## Terms and Conditions （要修正）
+## Terms and Conditions
 
 ### Creative Commons License
 <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
@@ -101,11 +101,12 @@ By using **descSPIM-Advanced**, you agree to the following:
 
 ---
 
-## References（要修正）
+## References
 
 - **Otomo, K. et al.** *descSPIM: an affordable and easy-to-build light-sheet microscope optimized for tissue clearing techniques.* **Nat. Commun. 15, 4941 (2024).**  
 - **Susaki, E. A. et al.** *Versatile whole-organ/body staining and imaging based on electrolyte-gel properties of biological tissues.* **Nat. Commun. 11, 1982 (2020).**  
 - **Matsumoto, K. et al.** *Advanced CUBIC tissue clearing for whole-organ cell profiling.* **Nat. Protoc. 14, 3506–3537 (2019).**  
+- [CUBIC-HistoVIsion2.0 protocol](https://www.protocols.io/view/cubic-histovision2-0-n92ld1wyxl5b/v1)  
 - [CUBIC resource website](http://cubic.riken.jp)
 
 ---
