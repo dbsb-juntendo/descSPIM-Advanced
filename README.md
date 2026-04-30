@@ -3,18 +3,38 @@
 **descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) ecosystem for cleared-tissue imaging.
 
 It builds on our previous open-hardware platform, **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**  
-(**desktop-equipped SPIM for cleared specimens**), which was developed as a low-cost and easy-to-build LSFM system for tissue-clearing applications.
+(**desktop-equipped SPIM for cleared specimens**), a low-cost and easy-to-build LSFM system for tissue-clearing applications.
 
-As of **April 2026**, more than **50 independently built descSPIM-basic systems** have been established worldwide, demonstrating the practical accessibility and broad deployability of the original platform.
-
----
-
-## Why descSPIM-Advanced?
+As of **April 2026**, more than **50 independently built descSPIM-basic systems** have been established worldwide, demonstrating the accessibility and broad deployability of the original platform.
 
 <p>
   <img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="330" />
   <img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="380" />
 </p>
+
+---
+
+<h1>Unified Control with Mission Control Center</h1>
+
+## A shared operational architecture for descSPIM-basic and descSPIM-Advanced
+
+The **Mission Control Center (MCC)** is a unified, Python-based control framework that provides a common operational interface for the major hardware components of both **descSPIM-basic** and **descSPIM-Advanced** systems.
+
+<p>
+  <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
+</p>
+
+MCC integrates core microscope operations into a single control environment, including motorized stage control, camera control, laser operation, filter switching, galvanometric scanner control, and other variant-specific hardware functions.
+
+By reducing the need for multiple independent software tools, MCC supports reproducible operation across the descSPIM ecosystem.
+
+> [!IMPORTANT]
+> MCC is designed to control the principal hardware components of **descSPIM-basic** and all **descSPIM-Advanced variants**.  
+> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is operated separately using the dedicated Galaxy GUI.
+
+---
+
+<h1>Why descSPIM-Advanced?</h1>
 
 Although **descSPIM-basic** provided an accessible entry point for cleared-tissue LSFM, several limitations remained for advanced imaging applications.
 
@@ -26,54 +46,11 @@ Although **descSPIM-basic** provided an accessible entry point for cleared-tissu
 | Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
-**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.**
+**descSPIM-Advanced** was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.
 
-Depending on the selected configuration, the platform enables:
-
-- expanded whole-organ field-of-view imaging,
-- subcellular-resolution volumetric imaging,
-- ultra-multicolor 3D imaging,
-- and low-cost routine cleared-tissue imaging.
+Depending on the selected configuration, the platform enables expanded whole-organ field-of-view imaging, subcellular-resolution volumetric imaging, ultra-multicolor 3D imaging, and low-cost routine cleared-tissue imaging.
 
 These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of the original descSPIM-basic.
-
-**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.**
-
-Depending on the selected configuration, the platform enables:
-
-- expanded whole-organ field-of-view imaging,
-- subcellular-resolution volumetric imaging,
-- ultra-multicolor 3D imaging,
-- and low-cost routine cleared-tissue imaging.
-
-These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of the original descSPIM-basic.
-
----
-
-<h1>Unified Control with Mission Control Center</h1>
-
-## A shared operational architecture for descSPIM-basic and descSPIM-Advanced
-
-The **Mission Control Center (MCC)** is a unified, Python-based control framework for the descSPIM family.
-
-MCC provides a common operational interface for the major hardware components of both **descSPIM-basic** and the **descSPIM-Advanced** systems, including:
-
-- motorized stages,
-- scientific cameras,
-- laser sources,
-- filter wheels,
-- galvanometric scanners,
-- and other variant-specific hardware modules.
-
-<p>
-  <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
-</p>
-
-By consolidating microscope operation into a single control environment, MCC reduces the need for multiple independent software tools and supports reproducible operation across different descSPIM configurations.
-
-> [!IMPORTANT]
-> MCC is designed to control the principal hardware components of **descSPIM-basic** and all **descSPIM-Advanced variants**.  
-> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is operated separately using the dedicated Galaxy GUI.
 
 ---
 
