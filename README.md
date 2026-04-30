@@ -45,6 +45,33 @@ These capabilities are implemented through four interoperable variants — **Ful
 
 ---
 
+<h1>Unified Control with Mission Control Center</h1>
+
+## A shared operational architecture for descSPIM-basic and descSPIM-Advanced
+
+The **Mission Control Center (MCC)** is a unified, Python-based control framework for the descSPIM family.
+
+MCC provides a common operational interface for the major hardware components of both **descSPIM-basic** and the **descSPIM-Advanced** systems, including:
+
+- motorized stages,
+- scientific cameras,
+- laser sources,
+- filter wheels,
+- galvanometric scanners,
+- and other variant-specific hardware modules.
+
+<p>
+  <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
+</p>
+
+By consolidating microscope operation into a single control environment, MCC reduces the need for multiple independent software tools and supports reproducible operation across different descSPIM configurations.
+
+> [!IMPORTANT]
+> MCC is designed to control the principal hardware components of **descSPIM-basic** and all **descSPIM-Advanced variants**.  
+> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is operated separately using the dedicated Galaxy GUI.
+
+---
+
 <h1>The descSPIM-Advanced Platform</h1>
 
 The **descSPIM-Advanced platform** consists of four interoperable variants, each optimized for a distinct imaging regime.
@@ -85,34 +112,9 @@ Each configuration includes step-by-step documentation for construction, alignme
 
 ---
 
-<h1>Mission Control Center</h1>
-
-## A shared operational architecture for the descSPIM family
-
-The **Mission Control Center (MCC)** is a unified, Python-based control framework developed to operate the major hardware components of both **descSPIM-basic** and the **descSPIM-Advanced** systems.
-
-MCC provides a common operational interface across the descSPIM family and enables integrated control of key microscope components, including:
-
-- motorized stages,
-- scientific cameras,
-- laser sources,
-- filter wheels,
-- galvanometric scanners,
-- and other variant-specific hardware modules.
-
-<p>
-  <img width="2114" height="1905" alt="アセット 164" src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd"  width="100%" />
-</p>
-
-By consolidating these functions into a single control environment, MCC reduces the need for multiple independent software tools and supports reproducible operation across different descSPIM configurations.
-
-> [!IMPORTANT]
-> MCC is designed to control the principal hardware components of **descSPIM-basic** and all **descSPIM-Advanced variants**.  
-> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is operated separately using the dedicated Galaxy GUI.
-
----
-
 <h1>MCC Support Across the descSPIM Family</h1>
+
+The table below summarizes how MCC supports the main hardware configurations across **descSPIM-basic** and the **descSPIM-Advanced** variants.
 
 | System / Variant | Main hardware configuration | MCC support |
 |---|---|---|
