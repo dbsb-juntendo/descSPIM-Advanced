@@ -32,7 +32,7 @@ Depending on the selected configuration, descSPIM-Advanced enables:
 - ultra-multicolor 3D imaging,
 - and low-cost routine cleared-tissue imaging.
 
-These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of descSPIM-basic.
+**These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of descSPIM-basic.**
 ---
 
 <h1>Common control architecture</h1>
