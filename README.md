@@ -22,7 +22,8 @@ While descSPIM-basic provided an accessible entry point for cleared-tissue LSFM,
 | Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
-**descSPIM-Advanced extends the original descSPIM-basic concept from a single accessible LSFM design into a scalable imaging ecosystem.**
+> [!IMPORTANT]
+> **descSPIM-Advanced extends the original descSPIM-basic concept from a single accessible LSFM design into a scalable imaging ecosystem.**
 
 Depending on the selected configuration, descSPIM-Advanced enables:
 
