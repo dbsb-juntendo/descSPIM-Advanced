@@ -1,10 +1,36 @@
 ## What is descSPIM-Advanced?
 
-**descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) platform for cleared-tissue imaging.
+<h3 align="center">
+  An open and extensible LSFM ecosystem for cleared-tissue imaging
+</h3>
 
-It builds on our previous system, **descSPIM-basic** (**desktop-equipped SPIM for cleared specimens**), which was developed as a low-cost and minimal-expertise LSFM platform for tissue-clearing applications. The original descSPIM-basic could be assembled within a single day at a cost of approximately **USD 20,000–50,000**, and has since been adopted in more than **50 independently built systems** worldwide.
+<p align="center">
+  <strong>
+    descSPIM-Advanced expands the original descSPIM-basic platform toward large-field,
+    high-resolution, ultra-multicolor, and low-cost cleared-tissue imaging.
+  </strong>
+</p>
 
-Although descSPIM-basic provided an accessible entry point for organ-scale volumetric imaging, several limitations remained for more advanced imaging applications:
+---
+
+### Background
+
+**descSPIM-Advanced** builds on our previous system, **descSPIM-basic**  
+(**desktop-equipped SPIM for cleared specimens**), a low-cost and minimal-expertise light-sheet fluorescence microscopy (LSFM) platform optimized for tissue-clearing applications.
+
+The original **descSPIM-basic** system was designed to be accessible to non-specialist users and could be:
+
+- assembled within a single day,
+- built at a cost of approximately **USD 20,000–50,000**,
+- and used for organ-scale volumetric imaging.
+
+Since its introduction, more than **50 independently built systems** have been established worldwide and applied across diverse biological research fields.
+
+---
+
+### Why descSPIM-Advanced?
+
+Although descSPIM-basic provided an accessible entry point for cleared-tissue LSFM, several limitations remained for advanced imaging applications.
 
 | Limitation of descSPIM-basic | Need addressed by descSPIM-Advanced |
 |---|---|
@@ -14,70 +40,139 @@ Although descSPIM-basic provided an accessible entry point for organ-scale volum
 | Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
-**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.** Depending on the selected configuration, the platform enables expanded whole-organ field-of-view imaging, subcellular-resolution volumetric imaging, ultra-multicolor 3D imaging, and low-cost routine cleared-tissue imaging.
+**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.**
+
+Depending on the selected configuration, the platform enables:
+
+- expanded whole-organ field-of-view imaging,
+- subcellular-resolution volumetric imaging,
+- ultra-multicolor 3D imaging,
+- and low-cost routine cleared-tissue imaging.
 
 These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of the original descSPIM-basic.
 
-
-<img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="300" />
-<img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="350"/>
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="330" />
+  <img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="380" />
+</p>
 
 ---
 
 ## The descSPIM-Advanced Platform
 
-The **descSPIM-Advanced platform** was developed to overcome the limitations of the initial descSPIM-basic, introducing **four interoperable variants** that expand both the conceptual and functional “space” of the system:
+The **descSPIM-Advanced platform** consists of four interoperable variants, each optimized for a distinct imaging regime.
 
-- **descSPIM-FullMoon** uses **dual-sided illumination** and **beam pivoting** to reduce attenuation and striping for uniform wide-field imaging.  
-- **descSPIM-DeepSky** enhances both lateral and axial resolution with **high-numerical-aperture (NA) optics** for subcellular observation.  
-- **descSPIM-Galaxy** integrates a **hyperspectral detection system** and dedicated analysis pipeline, enabling **>10-color 3D imaging**.  
-- **descSPIM-SLIM** adopts highly affordable **laser light sources** and **simplified optics** to provide **three-color excitation** at approximately **USD 15,000**, offering the most accessible configuration in the series.
+| Variant | Main capability | Representative application |
+|---|---|---|
+| **descSPIM-FullMoon** | Large field-of-view imaging | Uniform wide-field imaging of large cleared organs |
+| **descSPIM-DeepSky** | High spatial resolution | Subcellular-resolution volumetric imaging |
+| **descSPIM-Galaxy** | Ultra-multicolor / hyperspectral imaging | More than 10-color 3D imaging |
+| **descSPIM-SLIM** | Low-cost simplified deployment | Entry-level three-color cleared-tissue imaging |
 
-Together, the **descSPIM family** establishes a scalable platform for cleared-tissue LSFM—ranging from entry-level, low-cost builds to high-performance systems capable of **expanded whole-organ field-of-view observation, subcellular resolution, and high-channel multicolor imaging**.  
-Each configuration includes step-by-step protocols for construction, alignment, acquisition, and processing, allowing both new and experienced users to achieve high-quality imaging without technical or financial barriers.
+### Variant highlights
 
----
+- **descSPIM-FullMoon** uses **dual-sided illumination** and **beam pivoting** to reduce attenuation and striping during large-volume imaging.
+- **descSPIM-DeepSky** uses **high-numerical-aperture optics** to improve lateral and axial resolution for high-resolution 3D observation.
+- **descSPIM-Galaxy** integrates **hyperspectral detection** and a dedicated analysis pipeline for ultra-multicolor cleared-tissue imaging.
+- **descSPIM-SLIM** adopts **simplified optics** and affordable laser sources to provide a highly accessible configuration at approximately **USD 15,000**.
 
-## System Overview
-
-| Variant | Key Feature | Representative Application |
-|----------|--------------|-----------------------------|
-| **FullMoon** | Dual-sided illumination with beam pivoting | Uniform wide-field imaging of large organs |
-| **DeepSky** | High-NA optics | Subcellular-resolution volumetric imaging |
-| **Galaxy** | Hyperspectral detection pipeline | >10-color multiplexed imaging |
-| **SLIM** | Simplified optics, low-cost lasers | Entry-level, three-color imaging (~USD 15k) |
+Together, the **descSPIM family** provides a scalable cleared-tissue LSFM ecosystem, ranging from entry-level low-cost systems to high-performance configurations for large-volume, high-resolution, and high-channel imaging.
 
 ---
 
 ## Build & Operation Guides
 
-- **Optical construction and alignment**: detailed step-by-step manuals are provided within each model-specific directory  
-- **Imaging parameter optimization**: recommended exposure times, laser powers, and detection filters  
-- **Post-acquisition processing**: registration, stitching, and multicolor alignment (Python/ANTs-based workflows)
+Each configuration includes step-by-step documentation for construction, alignment, acquisition, and processing.
+
+| Guide type | Contents |
+|---|---|
+| **Optical construction and alignment** | Model-specific build manuals and alignment procedures |
+| **Imaging parameter optimization** | Recommended exposure times, laser powers, and detection filters |
+| **Post-acquisition processing** | Registration, stitching, and multicolor alignment workflows |
+| **MCC installation** | Installation guide for the Mission Control Center control GUI |
 
 > [!NOTE]
 > Build time varies depending on the variant and user experience:  
-> *SLIM*: ~1 week  *FullMoon / DeepSky / Galaxy*: 2–6 weeks.
+> **SLIM**: ~1 week  
+> **FullMoon / DeepSky / Galaxy**: 2–6 weeks
 
 ---
 
 ## Control & Acquisition Software Overview
-The table below summarizes the software ecosystem for each descSPIM system, specifying the role of each application (full control, camera control, stage control) and including manufacturer information. Custom-developed modules such as system-specific GUIs and the Sequence Controller are listed in dedicated columns.
 
-| System / Variant | **Mission Control Center** | **ImSwitch** | **Custom Dedicated GUI** | **Sequence Controller (custom)** | Included Softwares (with roles & manufacturers) |
-|------------------|----------------------------|--------------|---------------------------|-----------------------------------|--------------------------------------------------|
-| **descSPIM-basic** | **Full control (stages + camera + laser source)** | – | – | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages); Micro-Manager (Open-source, optional) |
-| **descSPIM-FullMoon** | **Full control (stages + camera + laser source + galvanometric scanner)** | – | – | – | Kinesis (Thorlabs, for stages); NIS-Elements (Nikon, for DS50M CMOS camera) |
-| **descSPIM-DeepSky** | **Full control (stages + camera + pattern generator + laser source)** | **Full control** | – | – | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages) |
-| **descSPIM-Galaxy** | **Partial support (Thorlabs CMOS cameras + stages + laser source)** | – | Galaxy GUI (hyperspectral imaging) | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages); Micro-Manager (Open-source, for stages); HSI SNAPSCAN (imec, for hyperspectral detector) |
-| **descSPIM-SLIM** | **Full control (stages + camera)** | – | SLIM imaging GUI | ✔️ (Thorlabs-based integration) | ThorCam (Thorlabs, for camera); Kinesis (Thorlabs, for stages) |
+<p align="center">
+  <img src="ここにMCC_GUI画像のGitHub画像URLを入れる" width="1000"/>
+</p>
 
+### Mission Control Center
 
-> **Note on descSPIM-Galaxy**
->
-> The Galaxy system uses two custom software modules—the **Galaxy GUI** and the **Sequence Controller**—which operate independently to support its two detection modes (the Thorlabs CMOS camera and the hyperspectral detector).  
-> Using both modules during acquisition enables ultra-multicolour imaging across complementary detection modes.
+The **Mission Control Center (MCC)** is a unified, Python-based control framework for the descSPIM family.
+
+MCC provides centralized control of the major hardware components used across **descSPIM-basic** and the **descSPIM-Advanced variants**, including:
+
+- motorized stages,
+- cameras,
+- laser sources,
+- filter wheels,
+- galvanometric scanners,
+- and other variant-specific hardware modules.
+
+Across the descSPIM platform, MCC is designed to control the major components of both **descSPIM-basic** and **descSPIM-Advanced systems**, with the exception of the hyperspectral detector used in **descSPIM-Galaxy**, which is operated through a dedicated Galaxy GUI.
+
+This unified architecture reduces the need for multiple independent software environments and provides a common operational interface across the descSPIM ecosystem.
+
+| System / Variant | MCC support | Additional software |
+|---|---|---|
+| **descSPIM-basic** | **Full control** of stages, camera, and laser source | Optional Micro-Manager |
+| **descSPIM-FullMoon** | **Full control** of stages, camera, laser source, filters, and galvanometric scanner | — |
+| **descSPIM-DeepSky** | **Full control** of stages, camera, pattern generator, and laser source | ImSwitch-compatible operation is also available |
+| **descSPIM-Galaxy** | **MCC control** of stages, Thorlabs CMOS camera, laser source, and filter wheel | Galaxy GUI for hyperspectral detector operation |
+| **descSPIM-SLIM** | **Full control** of stages and camera | SLIM imaging GUI / Sequence Controller |
+
+> [!IMPORTANT]
+> MCC covers the principal control functions of **descSPIM-basic** and the **descSPIM-Advanced systems**.  
+> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is controlled separately using the dedicated Galaxy GUI.
+
+For detailed installation, architecture, and developer information, please refer to the dedicated **Mission Control Center README**.
+
+---
+
+## Related Links
+
+- [descSPIM-basic GitHub repository](https://github.com/dbsb-juntendo/descSPIM)
+- [CUBIC Resource Site](http://cubic.riken.jp)
+- [Data Processing Tools](https://github.com/dbsb-juntendo/descSPIM/blob/main/DOCs/Data%20processing.md)
+
+---
+
+## Terms and Conditions
+
+### Creative Commons License
+
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">
+  <img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" />
+</a>
+
+This work is licensed under a  
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+
+By using **descSPIM-Advanced**, you agree to the following:
+
+- Academic use only; commercial use requires author permission.
+- Modifications and redistribution are allowed under CC BY-NC-SA 4.0.
+- Cite the original work in all publications and presentations.
+- The authors are not responsible for damages or misuse.
+- All disputes shall be governed by Japanese law.
+
+---
+
+## References
+
+- **Otomo, K. et al.** *descSPIM: an affordable and easy-to-build light-sheet microscope optimized for tissue clearing techniques.* **Nat. Commun. 15, 4941 (2024).**
+- **Susaki, E. A. et al.** *Versatile whole-organ/body staining and imaging based on electrolyte-gel properties of biological tissues.* **Nat. Commun. 11, 1982 (2020).**
+- **Matsumoto, K. et al.** *Advanced CUBIC tissue clearing for whole-organ cell profiling.* **Nat. Protoc. 14, 3506–3537 (2019).**
+- [CUBIC-HistoVision2.0 protocol](https://www.protocols.io/view/cubic-histovision2-0-n92ld1wyxl5b/v1)
+- [CUBIC resource website](http://cubic.riken.jp)
 
 ---
 
