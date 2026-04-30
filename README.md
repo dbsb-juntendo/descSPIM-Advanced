@@ -101,7 +101,7 @@ MCC provides a common operational interface across the descSPIM family and enabl
 - and other variant-specific hardware modules.
 
 <p>
-  <img src=<img width="2114" height="1905" alt="アセット 164" src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd"  width="100%" />
+  <img width="2114" height="1905" alt="アセット 164" src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd"  width="100%" />
 </p>
 
 By consolidating these functions into a single control environment, MCC reduces the need for multiple independent software tools and supports reproducible operation across different descSPIM configurations.
