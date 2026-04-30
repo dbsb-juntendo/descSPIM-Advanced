@@ -11,6 +11,11 @@ As of **April 2026**, more than **50 independently built descSPIM-basic systems*
 
 <h1>Platform concept</h1>
 
+<p>
+  <img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="330" />
+  <img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="380" />
+</p>
+
 descSPIM-Advanced extends the original descSPIM-basic concept from a single accessible LSFM design into a scalable imaging ecosystem.
 
 The platform addresses key limitations of descSPIM-basic while preserving its accessibility:
@@ -31,11 +36,6 @@ Depending on the selected configuration, descSPIM-Advanced enables:
 - and low-cost routine cleared-tissue imaging.
 
 These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of descSPIM-basic.
-
-<p>
-  <img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="330" />
-  <img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="380" />
-</p>
 
 ---
 
