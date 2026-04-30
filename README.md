@@ -1,19 +1,22 @@
-# descSPIM-Advanced
+## What is descSPIM-Advanced?
 
-**descSPIM-Advanced: scalable and accessible light-sheet microscopy platform for cleared-tissue imaging**
+**descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) platform for cleared-tissue imaging.
 
+It builds on our previous system, **descSPIM-basic** (**desktop-equipped SPIM for cleared specimens**), which was developed as a low-cost and minimal-expertise LSFM platform for tissue-clearing applications. The original descSPIM-basic could be assembled within a single day at a cost of approximately **USD 20,000–50,000**, and has since been adopted in more than **50 independently built systems** worldwide.
 
+Although descSPIM-basic provided an accessible entry point for organ-scale volumetric imaging, several limitations remained for more advanced imaging applications:
 
----
+| Limitation of descSPIM-basic | Need addressed by descSPIM-Advanced |
+|---|---|
+| Single-side illumination | More uniform imaging of large cleared samples |
+| Residual striping in large-volume imaging | Reduced attenuation and striping |
+| Low-magnification detection | Higher spatial resolution |
+| Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
+| Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
-## What is descSPIM-Advanced aimed for?
+**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.** Depending on the selected configuration, the platform enables expanded whole-organ field-of-view imaging, subcellular-resolution volumetric imaging, ultra-multicolor 3D imaging, and low-cost routine cleared-tissue imaging.
 
-Building on the open-hardware movement, we previously developed **descSPIM (desktop-equipped SPIM for cleared specimens)**, a minimal-expertise and low-cost LSFM platform optimized for tissue-clearing applications. The original **descSPIM-basic** could be assembled within a single day at a cost of approximately **USD 20,000–50,000**, yet achieved sufficient performance for organ-scale volumetric imaging. Since its introduction, **over fifty independently built systems** have been established worldwide and applied by non-specialist life scientists across diverse research domains.
-
-However, the simplicity-first design of descSPIM-basic imposed several limitations in advanced imaging contexts. The **single-side illumination** configuration left residual striping when imaging large cleared samples that exceeded a single field of view, requiring multi-region acquisition followed by advanced stitching and registration. The **low-magnification detection** restricted subcellular resolution, and **multicolor imaging** was limited to three to four excitation channels. Furthermore, there remained room for **further cost optimization and optical simplification**.
-
-**descSPIM-Advanced is aimed for overcoming these limitations**, providing expanded whole-organ field-of-view imaging, subcellular-resolution performance, ultra-multicolor capability, and a more accessible low-cost option depending on the selected configuration. These goals are realized through four interoperable variants — FullMoon, DeepSky, Galaxy, and SLIM — that extend both the conceptual and functional range of the original descSPIM-basic.
-
+These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of the original descSPIM-basic.
 <img src="https://github.com/user-attachments/assets/73d1c159-37be-4f4f-87a0-465933087797" width="300" />
 <img src="https://github.com/user-attachments/assets/49bf6eeb-6fc2-4a57-acee-92f118a8f9e9" width="350"/>
 
