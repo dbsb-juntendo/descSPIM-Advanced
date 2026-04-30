@@ -124,7 +124,7 @@ The table below summarizes how MCC supports the main hardware configurations acr
 > In **descSPIM-Galaxy**, MCC controls the standard microscope hardware components, including the stages, Thorlabs CMOS camera, laser source, and filter wheel.  
 > The hyperspectral detector is controlled separately using the dedicated **Galaxy GUI**.
 
-For detailed installation, architecture, and developer information, please refer to the dedicated **Mission Control Center README**.
+For detailed installation, architecture, and developer information, please refer to the dedicated **[Mission Control Center README](https://github.com/dbsb-juntendo/descSPIM-Advanced/tree/main/Mission%20Control%20Center)**.
 
 ---
 
