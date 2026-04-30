@@ -2,22 +2,16 @@
 
 **descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) ecosystem for cleared-tissue imaging.
 
-It builds on our previous system, **descSPIM-basic**  
-(**desktop-equipped SPIM for cleared specimens**), a low-cost and minimal-expertise LSFM platform optimized for tissue-clearing applications.
+It builds on our previous open-hardware platform, **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**  
+(**desktop-equipped SPIM for cleared specimens**), which was developed as a low-cost and easy-to-build LSFM system for tissue-clearing applications.
 
-The original **descSPIM-basic** system was designed to be accessible to non-specialist users and could be:
-
-- assembled within a single day,
-- built at a cost of approximately **USD 20,000–50,000**,
-- and used for organ-scale volumetric imaging.
-
-Since its introduction, more than **50 independently built systems** have been established worldwide and applied across diverse biological research fields.
+As of **April 2026**, more than **50 independently built descSPIM-basic systems** have been established worldwide, demonstrating the practical accessibility and broad deployability of the original platform.
 
 ---
 
 ## Why descSPIM-Advanced?
 
-Although descSPIM-basic provided an accessible entry point for cleared-tissue LSFM, several limitations remained for advanced imaging applications.
+Although **descSPIM-basic** provided an accessible entry point for cleared-tissue LSFM, several limitations remained for advanced imaging applications.
 
 | Limitation of descSPIM-basic | Need addressed by descSPIM-Advanced |
 |---|---|
@@ -26,6 +20,17 @@ Although descSPIM-basic provided an accessible entry point for cleared-tissue LS
 | Low-magnification detection | Higher spatial resolution |
 | Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
+
+**descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.**
+
+Depending on the selected configuration, the platform enables:
+
+- expanded whole-organ field-of-view imaging,
+- subcellular-resolution volumetric imaging,
+- ultra-multicolor 3D imaging,
+- and low-cost routine cleared-tissue imaging.
+
+These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of the original descSPIM-basic.
 
 **descSPIM-Advanced was developed to overcome these limitations while preserving the accessibility of the original descSPIM concept.**
 
