@@ -92,8 +92,10 @@ Each configuration includes step-by-step documentation for construction, alignme
 
 > [!NOTE]
 > Build time varies depending on the variant and user experience:  
-> **SLIM**: ~1 week  
-> **FullMoon / DeepSky / Galaxy**: 2–6 weeks
+> **SLIM**: 2–5 h from scratch  
+> **Fullmoon**: 9–18 h from scratch  
+> **Deepsky**: 9–15 h from scratch  
+> **Galaxy**: 8–14 h from scratch
 
 ---
 
