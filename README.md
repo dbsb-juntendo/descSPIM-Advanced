@@ -19,7 +19,7 @@ While descSPIM-basic provided an accessible entry point for cleared-tissue LSFM,
 | Single-side illumination | Dual-side illumination |
 | Residual striping in large-volume imaging | Reduced attenuation and striping |
 | Low-magnification detection | Higher spatial resolution |
-| Three- to four-channel imaging | Super-multicolor / hyperspectral imaging |
+| Three- to four-channel imaging | Super-multicolor / hyperspectral imaging (7–11 colors) |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
 > [!IMPORTANT]
@@ -29,7 +29,7 @@ Depending on the selected configuration, descSPIM-Advanced enables:
 
 - expanded whole-organ field-of-view imaging,
 - subcellular-resolution volumetric imaging,
-- ultra-multicolor 3D imaging,
+- Super-multicolor 3D imaging,
 - and low-cost routine cleared-tissue imaging.
 
 These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of descSPIM-basic.
