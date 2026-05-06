@@ -60,10 +60,10 @@ The **descSPIM-Advanced platform** consists of four interoperable variants, each
 
 | Variant | Main capability | Representative application |
 |---|---|---|
-| **descSPIM-FullMoon** | Large field-of-view imaging | Uniform wide-field imaging of large cleared organs |
-| **descSPIM-DeepSky** | High spatial resolution | Subcellular-resolution volumetric imaging |
-| **descSPIM-Galaxy** | Ultra-multicolor / hyperspectral imaging | More than 10-color 3D imaging |
-| **descSPIM-SLIM** | Low-cost simplified deployment | Entry-level three-color cleared-tissue imaging |
+| **descSPIM-Fullmoon** | Large field-of-view imaging | Single-field volumetric imaging enabled by a 43-mm sensor-diagonal field of view |
+| **descSPIM-Deepsky** | High spatial resolution | High-resolution volumetric imaging for three-dimensional histology |
+| **descSPIM-Galaxy** | Super-multicolor / hyperspectral imaging | 7–11-color three-dimensional imaging of cleared tissues and optical phantoms |
+| **descSPIM-SLIM** | Low-cost simplified deployment | Rapid, low-cost deployment for 3–4-color cleared-tissue imaging |
 
 ## Variant highlights
 
