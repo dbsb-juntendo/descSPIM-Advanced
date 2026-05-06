@@ -67,10 +67,13 @@ The **descSPIM-Advanced platform** consists of four interoperable variants, each
 
 ## Variant highlights
 
-- **descSPIM-FullMoon** uses **dual-sided illumination** and **beam pivoting** to reduce attenuation and striping during large-volume imaging.
-- **descSPIM-DeepSky** uses **high-numerical-aperture optics** to improve lateral and axial resolution for high-resolution 3D observation.
-- **descSPIM-Galaxy** integrates **hyperspectral detection** and a dedicated analysis pipeline for ultra-multicolor cleared-tissue imaging.
-- **descSPIM-SLIM** adopts **simplified optics** and affordable laser sources to provide a highly accessible configuration at approximately **USD 15,000**.
+**descSPIM-Fullmoon** uses dual-side illumination, light-sheet pivoting, and a 60 MP camera with a 43-mm sensor diagonal to enable large-FOV, single-field volumetric imaging.
+
+**descSPIM-Deepsky** combines light-sheet pivoting, high-resolution imaging optics, a four-slot filter changer, and a variable slit to support high-resolution 3D histology with improved lateral and axial resolution.
+
+**descSPIM-Galaxy** integrates dual-camera detection, hyperspectral imaging, a six-slot filter changer, and a dedicated spectral unmixing pipeline for super-multicolor cleared-tissue imaging of up to 11 colors.
+
+**descSPIM-SLIM** adopts an open-top configuration, simplified optics, a variable slit, and affordable laser sources to provide a rapidly deployable, highly accessible configuration at approximately USD 15,000.
 
 Together, the **descSPIM family** provides a scalable cleared-tissue LSFM ecosystem, ranging from entry-level low-cost systems to high-performance configurations for large-volume, high-resolution, and high-channel imaging.
 
