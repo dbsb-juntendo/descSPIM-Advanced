@@ -16,10 +16,10 @@ While descSPIM-basic provided an accessible entry point for cleared-tissue LSFM,
 
 | Limitation of descSPIM-basic | Need addressed by descSPIM-Advanced |
 |---|---|
-| Single-side illumination | More uniform imaging of large cleared samples |
+| Single-side illumination | Dual-side illumination |
 | Residual striping in large-volume imaging | Reduced attenuation and striping |
 | Low-magnification detection | Higher spatial resolution |
-| Three- to four-channel imaging | Ultra-multicolor / hyperspectral imaging |
+| Three- to four-channel imaging | Super-multicolor / hyperspectral imaging |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
 > [!IMPORTANT]
