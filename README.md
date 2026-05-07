@@ -1,4 +1,4 @@
-<h1>What is the descSPIM-Advanced platform?</h1>
+<h1>What is the descSPIM-Advanced ?</h1>
 
 **descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) ecosystem for cleared-tissue imaging.
 
