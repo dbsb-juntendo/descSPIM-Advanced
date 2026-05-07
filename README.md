@@ -1,17 +1,17 @@
-<h1>What is the descSPIM-Advanced ?</h1>
+<h1>What is descSPIM-Advanced?</h1>
 
-**descSPIM-Advanced** is an open and extensible light-sheet fluorescence microscopy (LSFM) ecosystem for cleared-tissue imaging.
+**descSPIM-Advanced** is an open, extensible light-sheet fluorescence microscopy (LSFM) ecosystem designed for cleared-tissue imaging.
 
-It builds on our previous open-hardware platform, **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**  
-(**desktop-equipped SPIM for cleared specimens**), a low-cost and easy-to-build LSFM system for tissue-clearing applications.
+It builds on **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**  
+(**desktop-equipped SPIM for cleared specimens**), our previously developed open-hardware LSFM platform for tissue-clearing applications. descSPIM-basic was designed to make cleared-tissue LSFM easier to build, operate, and adopt in individual laboratories.
 
-As of **April 2026**, more than **50 independently built descSPIM-basic systems** have been established worldwide, demonstrating the accessibility and broad deployability of the original platform.
+As of **April 2026**, more than **50 descSPIM-basic systems** have been independently built worldwide, demonstrating the accessibility and broad deployability of the original platform.
 
 <p>
   <img width="1806" height="862" alt="GitHub figures" src="https://github.com/user-attachments/assets/4d9cdc04-36ee-414c-bde5-31b967f492d4" />
 </p>
 
-While descSPIM-basic provided an accessible entry point for cleared-tissue LSFM, several limitations remained for advanced imaging applications.
+While descSPIM-basic provided an accessible entry point to cleared-tissue LSFM, advanced applications still require greater imaging flexibility, including larger fields of view, higher spatial resolution, improved illumination, expanded color capability, and simplified deployment.
 
 | Limitation of descSPIM-basic | Need addressed by descSPIM-Advanced |
 |---|---|
@@ -22,30 +22,30 @@ While descSPIM-basic provided an accessible entry point for cleared-tissue LSFM,
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
 > [!IMPORTANT]
-> **descSPIM-Advanced extends the original descSPIM-basic concept from a single accessible LSFM design into a scalable imaging ecosystem.**
+> **descSPIM-Advanced expands descSPIM from a single accessible LSFM design into a scalable imaging ecosystem.**
 
-Depending on the selected configuration, descSPIM-Advanced enables:
+Depending on the selected configuration, descSPIM-Advanced supports:
 
-- expanded whole-organ field-of-view imaging,
-- subcellular-resolution volumetric imaging,
-- Super-multicolor 3D imaging,
+- large field-of-view whole-organ imaging,
+- high-resolution volumetric imaging,
+- super-multicolor 3D imaging,
 - and low-cost routine cleared-tissue imaging.
 
-These capabilities are implemented through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — which extend both the conceptual and functional range of descSPIM-basic.
+These capabilities are realized through four interoperable variants — **FullMoon, DeepSky, Galaxy, and SLIM** — each extending the descSPIM platform toward a distinct imaging regime.
 
 ---
 
 <h1>Common control architecture</h1>
 
-A key feature of descSPIM-Advanced is the **Mission Control Center (MCC)**, a shared operational architecture for the descSPIM family.
+A central feature of descSPIM-Advanced is the **Mission Control Center (MCC)**, a shared operational architecture for the descSPIM family.
 
-MCC provides a common Python-based control interface for the major hardware components of both **descSPIM-basic** and **descSPIM-Advanced** systems. It integrates core microscope operations such as stage movement, camera acquisition, laser control, filter switching, and galvanometric scanner operation into a unified GUI.
+MCC provides a Python-based control interface that standardizes operation across both **descSPIM-basic** and **descSPIM-Advanced** systems. It brings together key microscope functions — including stage movement, camera acquisition, laser control, filter switching, and galvanometric scanner operation — within a unified GUI.
 
 <p>
   <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
 </p>
 
-By combining multiple hardware-control functions into a single interface, MCC reduces the need for separate software environments and supports reproducible operation across different descSPIM configurations.
+By consolidating hardware control into a single interface, MCC reduces the need for separate software environments and supports reproducible operation across different descSPIM configurations.
 
 > [!IMPORTANT]
 > MCC is designed to control the principal hardware components of **descSPIM-basic** and all **descSPIM-Advanced variants**.  
@@ -59,28 +59,28 @@ The **descSPIM-Advanced platform** consists of four interoperable variants, each
 
 | Variant | Main capability | Representative application |
 |---|---|---|
-| **descSPIM-Fullmoon** | Large field-of-view imaging | Single-field volumetric imaging enabled by a 43-mm sensor-diagonal field of view |
-| **descSPIM-Deepsky** | High spatial resolution | High-resolution volumetric imaging for three-dimensional histology |
+| **descSPIM-FullMoon** | Large field-of-view imaging | Single-field volumetric imaging enabled by a 43-mm sensor-diagonal field of view |
+| **descSPIM-DeepSky** | High spatial resolution | High-resolution volumetric imaging for three-dimensional histology |
 | **descSPIM-Galaxy** | Super-multicolor / hyperspectral imaging | 7–11-color three-dimensional imaging of cleared tissues and optical phantoms |
 | **descSPIM-SLIM** | Low-cost simplified deployment | Rapid, low-cost deployment for 3–4-color cleared-tissue imaging |
 
 ## Variant highlights
 
-**descSPIM-Fullmoon** uses dual-side illumination, light-sheet pivoting, and a 60 MP camera with a 43-mm sensor diagonal to enable large-FOV, single-field volumetric imaging.
+**descSPIM-FullMoon** combines dual-side illumination, light-sheet pivoting, and a 60-MP camera with a 43-mm sensor diagonal to enable large-FOV, single-field volumetric imaging.
 
-**descSPIM-Deepsky** combines light-sheet pivoting, high-resolution imaging optics, a four-slot filter changer, and a variable slit to support high-resolution 3D histology with improved lateral and axial resolution.
+**descSPIM-DeepSky** combines light-sheet pivoting, high-resolution imaging optics, a four-slot filter changer, and a variable slit to support high-resolution 3D histology with improved lateral and axial resolution.
 
-**descSPIM-Galaxy** integrates dual-camera detection, hyperspectral imaging, a six-slot filter changer, and a dedicated spectral unmixing pipeline for super-multicolor cleared-tissue imaging of up to 11 colors.
+**descSPIM-Galaxy** integrates dual-camera detection, hyperspectral imaging, a six-slot filter changer, and a dedicated spectral unmixing pipeline to enable super-multicolor cleared-tissue imaging of up to 11 colors.
 
-**descSPIM-SLIM** adopts an open-top configuration, simplified optics, a variable slit, and affordable laser sources to provide a rapidly deployable, highly accessible configuration at approximately USD 15,000.
+**descSPIM-SLIM** adopts an open-top configuration, simplified optics, a variable slit, and affordable laser sources to provide a rapidly deployable and highly accessible configuration at approximately USD 15,000.
 
-Together, the **descSPIM family** provides a scalable cleared-tissue LSFM ecosystem, ranging from entry-level low-cost systems to high-performance configurations for large-volume, high-resolution, and high-channel imaging.
+Together, the **descSPIM family** provides a scalable cleared-tissue LSFM ecosystem, ranging from entry-level, low-cost systems to high-performance configurations for large-volume, high-resolution, and high-channel imaging.
 
 ---
 
-<h1>Build & Operation Guides</h1>
+<h1>Build and operation guides</h1>
 
-Each configuration includes step-by-step documentation for construction, alignment, acquisition, and processing.
+Each configuration includes step-by-step documentation for system construction, optical alignment, image acquisition, and post-acquisition processing.
 
 | Guide type | Contents |
 |---|---|
@@ -92,13 +92,13 @@ Each configuration includes step-by-step documentation for construction, alignme
 > [!NOTE]
 > Build time varies depending on the variant and user experience:  
 > **SLIM**: 2–5 h from scratch  
-> **Fullmoon**: 9–18 h from scratch  
-> **Deepsky**: 9–15 h from scratch  
+> **FullMoon**: 9–18 h from scratch  
+> **DeepSky**: 9–15 h from scratch  
 > **Galaxy**: 8–14 h from scratch
 
 ---
 
-<h1>Mission Control Center Overview</h1>
+<h1>Mission Control Center overview</h1>
 
 The **Mission Control Center (MCC)** is a unified, Python-based control framework for the descSPIM family.
 
@@ -115,11 +115,11 @@ The table below summarizes how MCC supports the main hardware configurations acr
 
 | System / Variant | Main hardware configuration | MCC support |
 |---|---|---|
-| **descSPIM-basic** | Stages, camera, laser source | **Full integrated control** |
-| **descSPIM-FullMoon** | Stages, camera, laser source, filter wheel, galvanometric scanner | **Full integrated control** |
-| **descSPIM-DeepSky** | Stages, camera, pattern generator, laser source | **Full integrated control** |
+| **descSPIM-basic** | Stages, camera, laser source | **Fully integrated control** |
+| **descSPIM-FullMoon** | Stages, camera, laser source, filter wheel, galvanometric scanner | **Fully integrated control** |
+| **descSPIM-DeepSky** | Stages, camera, pattern generator, laser source | **Fully integrated control** |
 | **descSPIM-Galaxy** | Stages, Thorlabs CMOS camera, laser source, filter wheel | **Integrated control by MCC** |
-| **descSPIM-SLIM** | Stages, camera | **Full integrated control** |
+| **descSPIM-SLIM** | Stages, camera | **Fully integrated control** |
 
 > [!NOTE]
 > In **descSPIM-Galaxy**, MCC controls the standard microscope hardware components, including the stages, Thorlabs CMOS camera, laser source, and filter wheel.  
