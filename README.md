@@ -1,9 +1,6 @@
-<h1>What is descSPIM-Advanced?</h1>
+<h1>descSPIM-Advanced</h1>
 
-**descSPIM-Advanced** is an open, extensible light-sheet fluorescence microscopy (LSFM) ecosystem designed for cleared-tissue imaging.
-
-It builds on **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**  
-(**desktop-equipped SPIM for cleared specimens**), our previously developed open-hardware LSFM platform for tissue-clearing applications. descSPIM-basic was designed to make cleared-tissue LSFM easier to build, operate, and adopt in individual laboratories.
+**descSPIM-Advanced** is an open, modular light-sheet fluorescence microscopy (LSFM) ecosystem designed for cleared-tissue imaging. It builds on **[descSPIM-basic](https://github.com/dbsb-juntendo/descSPIM)**(**desktop-equipped SPIM for cleared specimens**), our previously developed open-hardware LSFM platform for tissue-clearing applications. descSPIM-basic was designed to make cleared-tissue LSFM easier to build, operate, and adopt in individual laboratories. descSPIM-Advanced expands descSPIM from a single accessible LSFM design into a scalable and extensible imaging ecosystem
 
 As of **April 2026**, more than **50 descSPIM-basic systems** have been independently built worldwide, demonstrating the accessibility and broad deployability of the original platform.
 
@@ -21,9 +18,6 @@ While descSPIM-basic provided an accessible entry point to cleared-tissue LSFM, 
 | Three- to four-channel imaging | Super-multicolor / hyperspectral imaging (7–11 colors) |
 | Remaining optical and cost complexity | Simpler and lower-cost configurations |
 
-> [!IMPORTANT]
-> **descSPIM-Advanced expands descSPIM from a single accessible LSFM design into a scalable and extensible imaging ecosystem.**
-
 Depending on the selected configuration, descSPIM-Advanced can support:
 
 - large field-of-view whole-organ imaging,
@@ -35,9 +29,9 @@ In this initial implementation, we demonstrate these capabilities through four i
 
 ---
 
-<h1>Common control architecture</h1>
+<h1>Common system control software</h1>
 
-A central feature of descSPIM-Advanced is the **Mission Control Center (MCC)**, a shared operational architecture for the descSPIM family.
+A central feature of descSPIM-Advanced is the **Mission Control Center (MCC)**, a shared operational software for the descSPIM family.
 
 MCC provides a Python-based control interface that standardizes operation across both **descSPIM-basic** and current **descSPIM-Advanced** implementations. It brings together key microscope functions — including stage movement, camera acquisition, laser control, filter switching, and galvanometric scanner operation — within a unified GUI.
 
@@ -45,11 +39,7 @@ MCC provides a Python-based control interface that standardizes operation across
   <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
 </p>
 
-By consolidating hardware control into a single interface, MCC reduces the need for separate software environments and supports reproducible operation across different descSPIM configurations.
-
-> [!IMPORTANT]
-> MCC is designed to control the principal hardware components of **descSPIM-basic** and the current **descSPIM-Advanced implementations**.  
-> The main exception is the **hyperspectral detector in descSPIM-Galaxy**, which is operated separately using the dedicated Galaxy GUI.
+By consolidating hardware control into a single interface, MCC reduces the need for separate software environments and supports reproducible operation across different descSPIM configurations. The only exception is the **hyperspectral detector in descSPIM-Galaxy**, for which the detector is operated separately using the dedicated Galaxy GUI.
 
 ---
 
