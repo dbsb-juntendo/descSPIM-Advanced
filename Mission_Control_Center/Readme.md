@@ -2,10 +2,8 @@
 
 A unified control framework for descSPIM-basic and descSPIM-Advanced systems.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/dbsb-juntendo/descSPIM-Advanced/main/images/MCC_GUI.png"
-       alt="MCC graphical user interface"
-       width="900">
+<p>
+  <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
 </p>
 
 ---
