@@ -2,6 +2,12 @@
 
 A unified control framework for descSPIM-basic and descSPIM-Advanced systems.
 
+<p align="center">
+  <img src="images/MCC_GUI.png"
+       alt="MCC graphical user interface"
+       width="900">
+</p>
+
 ---
 
 ## Installation and Setup
@@ -16,13 +22,11 @@ Users must obtain all required vendor-provided SDKs and drivers separately from 
 
 After completing the installation and hardware configuration, launch MCC by double-clicking the MCC shortcut icon on the desktop.
 
-:::writing{variant="document" id="13974"}
 ## Safety Notice
 
 MCC is research software and is not intended for clinical, diagnostic, or safety-critical applications.
 
-MCC can control lasers, motorized stages, cameras, filter changers, and galvanometric mirrors. Users are responsible for confirming hardware compatibility and implementing appropriate laser-safety measures, motion limits, emergency-stop procedures, and other safeguards before operating the system.
-:::
+MCC can control lasers, motorized stages, cameras, filter changers, and galvo mirrors. Users are responsible for confirming hardware compatibility and implementing appropriate laser-safety measures, motion limits, emergency-stop procedures, and other safeguards before operating the system.
 
 ---
 
@@ -189,6 +193,6 @@ Documentation and figures in this repository are licensed under CC BY-NC-SA 4.0 
 
 For questions or contributions, please contact:  
 **[Naitouk](https://github.com/Naitouk)**  
-or open an Issue / Pull Request in this repository.
+or naitou.k.kagoshima@gmail.com
 
 
