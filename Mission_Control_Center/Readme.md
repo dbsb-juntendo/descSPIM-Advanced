@@ -171,7 +171,7 @@ The original Mission Control Center (MCC) source code in this repository is lice
 
 The license permits use, copying, modification, and redistribution for purposes permitted by the PolyForm Noncommercial License 1.0.0. Uses not permitted under the PolyForm Noncommercial License 1.0.0 are not authorized under this license.
 
-A separate written commercial license is generally required for uses by or on behalf of a for-profit enterprise, including incorporation into commercial products, provision of paid services, and distribution as part of commercially supplied instruments.
+A separate written commercial license is generally required for commercial uses, including incorporation into commercial products, provision of paid services, commercial product development, and distribution as part of commercially supplied instruments.
 
 For commercial licensing inquiries, please contact:
 

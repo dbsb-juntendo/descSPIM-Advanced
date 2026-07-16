@@ -8,8 +8,7 @@ Required Notice: Mission Control Center (MCC) is licensed under the PolyForm Non
 
 Required Notice: Any use not permitted under the PolyForm Noncommercial License 1.0.0 requires a separate written license from the copyright holder.
 
-Required Notice: For commercial licensing inquiries, contact 
-naitou.k.kagoshima@gmail.com
+Required Notice: For commercial licensing inquiries, contact Kiyotada Naitou: naitou.k.kagoshima@gmail.com
 
 ## License and Commercial Use
 
@@ -31,7 +30,7 @@ Commercial licenses may include separately negotiated terms concerning redistrib
 
 MCC may depend on or interact with third-party software, libraries, drivers, and hardware-development kits that are licensed separately by their respective copyright holders.
 
-The PolyForm Noncommercial License 1.0.0 applies only to the portions of MCC for which the identified MCC copyright holder have the authority to grant a license. Third-party components remain subject to their respective license terms.
+The PolyForm Noncommercial License 1.0.0 applies only to the portions of MCC for which the identified MCC copyright holder has the authority to grant a license. Third-party components remain subject to their respective license terms.
 
 ## Names and Trademarks
 
