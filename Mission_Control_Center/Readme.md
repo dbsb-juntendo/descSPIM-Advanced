@@ -6,15 +6,17 @@ A unified control framework for descSPIM-Advanced systems.
 
 ## Overview
 
-The **Mission Control Center (MCC)** is a modular, Python-based control system designed to operate key hardware components across the descSPIM-Advanced microscope series.  
-MCC integrates **laser sources, Thorlabs stages, Thorlabs CMOS cameras, Nikon DS50M cameras**, and other hardware elements into a unified, scalable control architecture.
+The **Mission Control Center (MCC)** is a modular, Python-based control framework for operating and coordinating hardware across descSPIM-basic and descSPIM-Advanced systems.
+MCC provides a unified graphical interface for controlling cameras, motorized stages, laser sources, filter changers, galvanometric mirrors, and other connected devices. Device-specific backends operate independently, while operator classes coordinate these modules to perform synchronized workflows, including multicolor and multistack acquisition.
 
 MCC is built on:
 
-- **Qt (PySide6)** for GUI and signal/slot communication  
-- **Python** for backend logic  
-- **SDK wrappers** for hardware control  
-- A modular operator–backend–SDK design that ensures extensibility and variant-specific customization
+- **Qt (PySide6)** for GUI and communication through Qt signals and slots  
+- **Python** for device control and workflow orchestration  
+- **Device-specific backends and SDK wrappers** for communication with individual hardware components
+- A modular GUI–operator–backend architecture that allows new devices and system configurations to be added without modifying the core application
+
+Third-party dependencies, including PySide6 and hardware-manufacturer SDKs, are not distributed with MCC and must be obtained separately under their respective license terms.
 
 ---
 
@@ -23,8 +25,6 @@ MCC is built on:
 Below is the conceptual architecture of MCC, showing how GUI consoles, operators, backends, and hardware SDK layers interact.
 
 <img width="613" height="334" alt="アートボード 1" src="https://github.com/user-attachments/assets/2153cf1a-4812-4118-b2d8-ea5e46f27983" />
-
-
 
 ---
 
@@ -36,32 +36,31 @@ Each hardware module is controlled from its dedicated console:
 - Camera console  
 - Stage console  
 - Laser console  
-- Filter console  
-- Galvanometric scanner console  
+- Filter changer console  
+- Galvanometer mirror console  
 
 ### **2. Qt Signal / Slot Layer**
-Provides real-time communication between GUI and backend modules.
+Provides real-time communication between consoles (GUI) and operaters.
 
 ### **3. Operator Layer (Python classes)**
 Implements high-level hardware actions:  
-exposure control, stage movement, laser power operations, filter switching, galvo scanning.
+The operator layer implements high-level device operations and coordinates multiple hardware modules through the main application. It manages synchronized workflows such as camera acquisition, stage movement, laser switching, filter changes, and multicolor or multistack imaging.
 
 ### **4. Backend Layer**
-Hardware-agnostic translation layer that:
-
-- Converts operator instructions to SDK functions  
-- Manages timing, synchronization, and error handling  
+Each backend encapsulates device-specific control logic and translates operator commands into calls to the corresponding SDK, serial interface, or device API. Backends are implemented as independent modules so that additional hardware can be supported without changing the core application.
 
 ### **5. SDK Layer**
-Interfaces with vendor SDKs:
+This layer interfaces with vendor SDKs and device communication protocols, including:
 
-- Thorlabs (Kinesis / ThorCam SDK)  
-- Nikon DS50M SDK  
-- Device-specific SDK wrappers  
+- Thorlabs Kinesis
+- Thorlabs Scientific Camera SDK
+- Nikon Digital Sight 50M SDK
+- Serial and USB communication interfaces
+- Device-specific Python wrappers
 
 ### **6. Physical Devices**
 Actual hardware components:  
-camera, stage, laser, filter, galvanometric scanner.
+camera, stage, laser, filter changer, galvanometer mirror.
 
 ---
 
@@ -101,40 +100,6 @@ camera, stage, laser, filter, galvanometric scanner.
 
 ---
 
-## Proposed Folder Structure
-
-```
-mcc/
- ├─ gui/
- │   ├─ mainwindow.py
- │   ├─ camera_console.py
- │   ├─ stage_console.py
- │   ├─ laser_console.py
- │   ├─ filter_console.py
- │   └─ galvo_console.py
- ├─ operators/
- │   ├─ camera_operator.py
- │   ├─ stage_operator.py
- │   ├─ laser_operator.py
- │   ├─ filter_operator.py
- │   └─ galvo_operator.py
- ├─ backend/
- │   ├─ camera_backend.py
- │   ├─ stage_backend.py
- │   ├─ laser_backend.py
- │   ├─ filter_backend.py
- │   └─ galvo_backend.py
- ├─ sdk/
- │   ├─ thorlabs/
- │   ├─ nikon/
- │   └─ wrappers/
- ├─ utils/
- ├─ config/
- └─ README.md
-```
-
----
-
 ## Future Directions
 
 - Optional integration with Micro-Manager ecosystem  
@@ -155,7 +120,24 @@ Additional citations will be added when descSPIM-Advanced is formally published.
 
 ## License
 
-This project follows CC BY-NC-SA 4.0, consistent with the descSPIM-Advanced platform.
+The original Mission Control Center (MCC) source code in this repository is licensed under the PolyForm Noncommercial License 1.0.0 (PolyForm-Noncommercial-1.0.0).
+
+The license permits use, copying, modification, and redistribution for purposes permitted by the PolyForm Noncommercial License 1.0.0. Commercial use is not authorized under this license.
+
+A separate written commercial license is required for the use of MCC in commercial products, paid services, commercially supplied instruments, or other commercial activities.
+
+For commercial licensing inquiries, please contact:
+
+naitou.k.kagoshima@gmail.com
+
+See the following files for details:
+
+LICENSE: the complete PolyForm Noncommercial License 1.0.0
+NOTICE.md: copyright, commercial licensing, safety, and third-party software notices
+
+MCC is source-available software and is not distributed under an OSI-approved open-source license.
+
+Documentation and figures in this repository are licensed under CC BY-NC-SA 4.0 unless otherwise noted.
 
 ---
 
