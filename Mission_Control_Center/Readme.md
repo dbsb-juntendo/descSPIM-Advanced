@@ -3,7 +3,7 @@
 A unified control framework for descSPIM-basic and descSPIM-Advanced systems.
 
 <p align="center">
-  <img src="images/MCC_GUI.png"
+  <img src="https://raw.githubusercontent.com/dbsb-juntendo/descSPIM-Advanced/main/images/MCC_GUI.png"
        alt="MCC graphical user interface"
        width="900">
 </p>
