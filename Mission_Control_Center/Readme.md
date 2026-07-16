@@ -31,7 +31,7 @@ Below is the conceptual architecture of MCC, showing how GUI consoles, operators
 ## Architecture Layers
 
 ### **1. Operation Room (MainWindow / GUI)**
-Each hardware module is controlled from its dedicated console:
+Each hardware module is controlled through dedicated console:
 
 - Camera console  
 - Stage console  
@@ -39,17 +39,16 @@ Each hardware module is controlled from its dedicated console:
 - Filter changer console  
 - Galvanometer mirror console  
 
-### **2. Qt Signal / Slot Layer**
-Provides real-time communication between consoles (GUI) and operaters.
+### **2. Qt Signals and Slots**
+Provides real-time communication between the GUI consoles and operator classes.
 
 ### **3. Operator Layer (Python classes)**
-Implements high-level hardware actions:  
-The operator layer implements high-level device operations and coordinates multiple hardware modules through the main application. It manages synchronized workflows such as camera acquisition, stage movement, laser switching, filter changes, and multicolor or multistack imaging.
+The operator layer implements high-level device operations and coordinates multiple hardware modules through the main application. It manages synchronized workflows such as camera acquisition, stage movement, laser switching, filter changes, galvanometer mirror, and multicolor or multistack imaging.
 
 ### **4. Backend Layer**
-Each backend encapsulates device-specific control logic and translates operator commands into calls to the corresponding SDK, serial interface, or device API. Backends are implemented as independent modules so that additional hardware can be supported without changing the core application.
+Each backend encapsulates device-specific control logic and translates operator commands into calls to the corresponding SDK, serial interface, or device API. Backends are implemented as independent modules so that additional hardware can be supported without modifying the core application.
 
-### **5. SDK Layer**
+### **5. SDK and Communication Layer**
 This layer interfaces with vendor SDKs and device communication protocols, including:
 
 - Thorlabs Kinesis
@@ -58,22 +57,48 @@ This layer interfaces with vendor SDKs and device communication protocols, inclu
 - Serial and USB communication interfaces
 - Device-specific Python wrappers
 
+Vendor-provided SDKs, drivers, and related software are not distributed in this repository. Users must obtain them separately from the respective manufacturers and comply with their applicable license terms. Detailed installation and setup instructions are provided in the PDF instruction manual included in this repository.
+
 ### **6. Physical Devices**
 Actual hardware components:  
 camera, stage, laser, filter changer, galvanometer mirror.
 
 ---
-
 ## Supported Hardware Components
 
-| Component | Supported Brands | Notes |
-|----------|------------------|-------|
-| Stages | Thorlabs (Kinesis) | Multi-axis control |
-| Cameras (CMOS) | Thorlabs | Full integration |
-| Cameras (Nikon) | DS50M | Controlled through MCC SDK layer |
-| Laser Sources | Cobolt Skyra | Full operation supported |
-| Filters | Motorized filter wheels, Thorlabs | SDK-level and GUI control |
-| Galvanometric Scanners | Galvo mirrors | Supported in FullMoon configuration |
+### Cameras
+
+| Manufacturer | Model / Series               | Control Interface              |
+| ------------ | ---------------------------- | ------------------------------ |
+| Thorlabs     | CS126MU,LP126MU/M            | Thorlabs Scientific Camera SDK |
+| Nikon        | Digital Sight 50M (DS50M)    | Nikon Digital Sight 50M SDK    |
+
+### Motorized Stages
+
+| Manufacturer | Model / Series                            | Control Interface |
+| ------------ | ----------------------------------------- | ----------------- |
+| Thorlabs     | KDC101 with DC servo motor actuator       | XA SDK            |
+| Thorlabs     | KST101 with ZFS25B stepper motor actuator | XA SDK            |
+
+### Laser Sources
+
+| Manufacturer | Model / Series                   | Control Interface    |
+| ------------ | -------------------------------- | -------------------- |
+| Cobolt       | Skyra                            | Serial communication |
+
+### Filter Changers
+
+| Manufacturer   | Model / Series  | Control Interface    |
+| -------------- | --------------- | -------------------- |
+| Thorlabs       | KST201 with SW6 | XA SDK.              |
+| Thorlabs       | ELL9            | Serial communication |
+
+### Galvanometer Mirrors
+
+| Manufacturer | Model / Series | Control Interface    |
+| ------------ | -------------- | -------------------- |
+| Joy-it       | JDS6600        | Serial communication |
+| RIGOL        | DG822          | USB communication    |
 
 ---
 
@@ -81,22 +106,22 @@ camera, stage, laser, filter changer, galvanometer mirror.
 
 | descSPIM Variant | MCC Support |
 |------------------|-------------|
-| **Basic** | Full control (stages, camera, laser source) |
-| **FullMoon** | Full control (stages, camera, laser source, galvanometric scanner) |
-| **DeepSky** | Full control (stages, camera, pattern generator, laser source) |
-| **Galaxy** | Partial support (Thorlabs CMOS cameras, stages, laser source) |
-| **SLIM** | Full control (stages, camera) |
+| **Basic** | Full control (Thorlabs CMOS camera, stages, laser) |
+| **Galaxy** | Partial support (Thorlabs CMOS camera, stages, laser, filter changer) |
+| **Deepsky** | Full control (Thorlabs CMOS camera, stages, laser, filter changer, galvanometer mirror) |
+| **Fullmoon** | Full control (Nikon CMOS camera, stages,  laser, galvanometer mirror) |
+| **SLIM** | Full control (Thorlabs CMOS camera, stages) |
 
 ---
 
 ## Key Features
 
-- **Unified GUI** for all hardware modules  
-- **Modular operator–backend–SDK design**  
-- **Hardware abstraction**, enabling easy expansion  
-- **Real-time responsiveness** via Qt signal/slot  
-- **Cross-variant deployability** across descSPIM-Advanced systems  
-- **Extendibility**: new devices can be added with minimal code additions  
+- **Unified GUI** controlling connected hardware modules
+- **Modular operator–backend–SDK architecture**  
+- **Hardware abstraction** for supporting different device configurations
+- **Real-time communication** through Qt signals and slots
+- **Cross-variant deployment** across descSPIM-basic and descSPIM-Advanced systems
+- **Extensibility**, allowing new devices to be added with minimal changes to the core application
 
 ---
 
@@ -113,8 +138,7 @@ camera, stage, laser, filter changer, galvanometer mirror.
 
 If you use MCC in your research, please cite:
 
-
-Additional citations will be added when descSPIM-Advanced is formally published.
+Citation information will be added after the formal publication of descSPIM-Advanced.
 
 ---
 
@@ -132,8 +156,9 @@ naitou.k.kagoshima@gmail.com
 
 See the following files for details:
 
-LICENSE: the complete PolyForm Noncommercial License 1.0.0
-NOTICE.md: copyright, commercial licensing, safety, and third-party software notices
+See the following files for details:
+- `LICENSE`: complete text of the PolyForm Noncommercial License 1.0.0
+- `NOTICE.md`: copyright, commercial licensing, and safety notices
 
 MCC is source-available software and is not distributed under an OSI-approved open-source license.
 
