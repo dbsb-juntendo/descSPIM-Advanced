@@ -1,6 +1,28 @@
 # Mission Control Center (MCC)
 
-A unified control framework for descSPIM-Advanced systems.
+A unified control framework for descSPIM-basic and descSPIM-Advanced systems.
+
+---
+
+## Installation and Setup
+
+Detailed instructions for installing MCC, setting up the Python environment, installing vendor-provided SDKs and drivers, configuring connected devices, and launching the application are provided in the instruction manual:
+
+* [MCC Installation Manual](https://github.com/dbsb-juntendo/descSPIM-Advanced/blob/main/Mission_Control_Center/20251217%20Mission%20Control%20Center%20Installation%20Manual.pdf)
+
+Users must obtain all required vendor-provided SDKs and drivers separately from the respective manufacturers.
+
+## Running MCC
+
+After completing the installation and hardware configuration, launch MCC by double-clicking the MCC shortcut icon on the desktop.
+
+:::writing{variant="document" id="13974"}
+## Safety Notice
+
+MCC is research software and is not intended for clinical, diagnostic, or safety-critical applications.
+
+MCC can control lasers, motorized stages, cameras, filter changers, and galvanometric mirrors. Users are responsible for confirming hardware compatibility and implementing appropriate laser-safety measures, motion limits, emergency-stop procedures, and other safeguards before operating the system.
+:::
 
 ---
 
@@ -31,7 +53,7 @@ Below is the conceptual architecture of MCC, showing how GUI consoles, operators
 ## Architecture Layers
 
 ### **1. Operation Room (MainWindow / GUI)**
-Each hardware module is controlled through dedicated console:
+Each hardware module is controlled through a dedicated console:
 
 - Camera console  
 - Stage console  
@@ -43,7 +65,7 @@ Each hardware module is controlled through dedicated console:
 Provides real-time communication between the GUI consoles and operator classes.
 
 ### **3. Operator Layer (Python classes)**
-The operator layer implements high-level device operations and coordinates multiple hardware modules through the main application. It manages synchronized workflows such as camera acquisition, stage movement, laser switching, filter changes, galvanometer mirror, and multicolor or multistack imaging.
+The operator layer implements high-level device operations and coordinates multiple hardware modules through the main application. It manages synchronized workflows such as camera acquisition, stage movement, laser switching, filter changes, galvanometric mirror scanning, and multicolor or multistack imaging.
 
 ### **4. Backend Layer**
 Each backend encapsulates device-specific control logic and translates operator commands into calls to the corresponding SDK, serial interface, or device API. Backends are implemented as independent modules so that additional hardware can be supported without modifying the core application.
@@ -60,8 +82,7 @@ This layer interfaces with vendor SDKs and device communication protocols, inclu
 Vendor-provided SDKs, drivers, and related software are not distributed in this repository. Users must obtain them separately from the respective manufacturers and comply with their applicable license terms. Detailed installation and setup instructions are provided in the PDF instruction manual included in this repository.
 
 ### **6. Physical Devices**
-Actual hardware components:  
-camera, stage, laser, filter changer, galvanometer mirror.
+The physical devices controlled by MCC include cameras, motorized stages, laser sources, filter changers, and galvanometric mirrors.
 
 ---
 ## Supported Hardware Components
@@ -70,7 +91,7 @@ camera, stage, laser, filter changer, galvanometer mirror.
 
 | Manufacturer | Model / Series               | Control Interface              |
 | ------------ | ---------------------------- | ------------------------------ |
-| Thorlabs     | CS126MU,LP126MU/M            | Thorlabs Scientific Camera SDK |
+| Thorlabs     | CS126MU, LP126MU/M           | Thorlabs Scientific Camera SDK |
 | Nikon        | Digital Sight 50M (DS50M)    | Nikon Digital Sight 50M SDK    |
 
 ### Motorized Stages
@@ -90,14 +111,14 @@ camera, stage, laser, filter changer, galvanometer mirror.
 
 | Manufacturer   | Model / Series  | Control Interface    |
 | -------------- | --------------- | -------------------- |
-| Thorlabs       | KST201 with SW6 | XA SDK.              |
+| Thorlabs       | KST201 with SW6 | XA SDK               |
 | Thorlabs       | ELL9            | Serial communication |
 
-### Galvanometer Mirrors
+### Pattern and Function Generators for Galvanometer Mirror Control
 
 | Manufacturer | Model / Series | Control Interface    |
 | ------------ | -------------- | -------------------- |
-| Joy-it       | JDS6600        | Serial communication |
+| Joy-IT       | JDS6600        | Serial communication |
 | RIGOL        | DG822          | USB communication    |
 
 ---
@@ -130,7 +151,7 @@ camera, stage, laser, filter changer, galvanometer mirror.
 - Optional integration with Micro-Manager ecosystem  
 - Automated alignment and calibration routines  
 - Improved synchronization primitives for hyperspectral (Galaxy) workflows  
-- Migration to Python 3.12+ compatibility  
+- Compatibility with future Python releases
 
 ---
 
@@ -153,8 +174,6 @@ A separate written commercial license is required for the use of MCC in commerci
 For commercial licensing inquiries, please contact:
 
 naitou.k.kagoshima@gmail.com
-
-See the following files for details:
 
 See the following files for details:
 - `LICENSE`: complete text of the PolyForm Noncommercial License 1.0.0
