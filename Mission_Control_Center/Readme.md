@@ -169,12 +169,14 @@ Citation information will be added after the formal publication of descSPIM-Adva
 
 The original Mission Control Center (MCC) source code in this repository is licensed under the PolyForm Noncommercial License 1.0.0 (PolyForm-Noncommercial-1.0.0).
 
-The license permits use, copying, modification, and redistribution for purposes permitted by the PolyForm Noncommercial License 1.0.0. Commercial use is not authorized under this license.
+The license permits use, copying, modification, and redistribution for purposes permitted by the PolyForm Noncommercial License 1.0.0. Uses not permitted under the PolyForm Noncommercial License 1.0.0 are not authorized under this license.
 
-A separate written commercial license is required for the use of MCC in commercial products, paid services, commercially supplied instruments, or other commercial activities.
+A separate written commercial license is generally required for uses by or on behalf of a for-profit enterprise, including incorporation into commercial products, provision of paid services, and distribution as part of commercially supplied instruments.
 
 For commercial licensing inquiries, please contact:
 
+Kiyotada Naitou
+Joint Faculty of Veterinary Medicine, Kagoshima University
 naitou.k.kagoshima@gmail.com
 
 See the following files for details:
@@ -183,7 +185,7 @@ See the following files for details:
 
 MCC is source-available software and is not distributed under an OSI-approved open-source license.
 
-Documentation and figures in this repository are licensed under CC BY-NC-SA 4.0 unless otherwise noted.
+Except where otherwise noted, original documentation and original figures created for this repository are licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License. This license does not apply to software code, third-party materials, product names, logos, or trademarks, which remain subject to their respective license terms and rights.
 
 ---
 

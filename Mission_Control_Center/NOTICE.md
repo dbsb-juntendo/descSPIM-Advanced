@@ -1,38 +1,41 @@
 # Mission Control Center (MCC) License Notice
 
-Required Notice: Copyright © 2026 [COPYRIGHT HOLDER]. All rights reserved.
+Mission Control Center (MCC) was developed by Kiyotada Naitou at Kagoshima University as the shared control software for descSPIM-basic and descSPIM-Advanced systems.
 
-Required Notice: Mission Control Center (MCC) is licensed under the PolyForm Noncommercial License 1.0.0.
+Required Notice: Copyright © 2026 Kiyotada Naitou. All rights reserved.
 
-Required Notice: Commercial use of MCC is not authorized under the PolyForm Noncommercial License 1.0.0 and requires a separate written commercial license from the copyright holder.
+Required Notice: Mission Control Center (MCC) is licensed under the PolyForm Noncommercial License 1.0.0. The full license terms are provided in the LICENSE file and at https://polyformproject.org/licenses/noncommercial/1.0.0/.
 
-Required Notice: For commercial licensing inquiries, contact [naitou.k.kagoshima@gmail.com](mailto:naitou.k.kagoshima@gmail.com).
+Required Notice: Any use not permitted under the PolyForm Noncommercial License 1.0.0 requires a separate written license from the copyright holder.
 
-Required Notice: MCC was developed as the shared control software for the descSPIM-Advanced platform.
+Required Notice: For commercial licensing inquiries, contact 
+naitou.k.kagoshima@gmail.com
 
-## Commercial Licensing
+## License and Commercial Use
 
-A separate commercial license is required for uses including, but not limited to:
+MCC may be used, modified, and distributed only as permitted under the PolyForm Noncommercial License 1.0.0.
+
+Subject to the permissions expressly provided by that license, a separate commercial license is generally required for commercial uses, including, but not limited to:
 
 * incorporation of MCC into a commercial product;
 * distribution of MCC as part of a commercially supplied microscope or other system;
-* use of MCC to provide paid imaging, analysis, maintenance, or other commercial services;
-* commercial manufacture, sale, sublicensing, or redistribution of systems incorporating MCC; and
-* internal use by a commercial enterprise for product development or other commercial purposes.
+* use of MCC by a for-profit entity to provide paid imaging, analysis, maintenance, or other services;
+* commercial manufacture, sale, licensing, or redistribution of systems incorporating MCC; and
+* internal use by a for-profit enterprise for product development or other commercial purposes.
 
-Commercial licenses may include separately negotiated terms concerning redistribution, modification, confidentiality, technical support, warranties, maintenance, and use of the MCC name and associated trademarks.
+These examples are illustrative and do not modify or replace the PolyForm Noncommercial License 1.0.0. In the event of any inconsistency, the terms contained in the LICENSE file control.
 
-## Citation
+Commercial licenses may include separately negotiated terms concerning redistribution, modification, confidentiality, technical support, warranties, maintenance, and use of the MCC name and associated marks.
 
-When MCC contributes to research reported in a publication or presentation, users are requested to cite the following publication:
+## Third-Party Software
 
-[FULL CITATION FOR THE MCC OR DESCSPIM-ADVANCED PAPER]
+MCC may depend on or interact with third-party software, libraries, drivers, and hardware-development kits that are licensed separately by their respective copyright holders.
 
-A machine-readable citation record is provided in the `CITATION.cff` file.
+The PolyForm Noncommercial License 1.0.0 applies only to the portions of MCC for which the identified MCC copyright holder have the authority to grant a license. Third-party components remain subject to their respective license terms.
 
-## Third-Party Names and Trademarks
+## Names and Trademarks
 
-This license does not grant permission to use the names, logos, trademarks, or service marks of MCC, descSPIM, descSPIM-Advanced, the authors, their institutions, or any third party, except as necessary for reasonable and customary attribution.
+This license does not grant permission to use the names, logos, trademarks, or service marks associated with MCC, descSPIM, descSPIM-Advanced, the authors, their institutions, or any third party, except as reasonably necessary for accurate and customary attribution.
 
 ## Research and Safety Notice
 
