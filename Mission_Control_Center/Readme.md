@@ -1,6 +1,6 @@
 # Mission Control Center (MCC)
 
-A unified control framework for descSPIM-basic and descSPIM-Advanced systems.
+The **Mission Control Center (MCC)** is unified control framework for descSPIM-basic and descSPIM-Advanced systems.
 
 <p>
   <img src="https://github.com/user-attachments/assets/8f3f431e-e155-48d2-9521-5b7bd2948cdd" width="100%" alt="Mission Control Center GUI" />
@@ -14,7 +14,7 @@ Detailed instructions for installing MCC, setting up the Python environment, ins
 
 * [MCC Installation Manual](https://github.com/dbsb-juntendo/descSPIM-Advanced/blob/main/Mission_Control_Center/20251217%20Mission%20Control%20Center%20Installation%20Manual.pdf)
 
-Users must obtain all required vendor-provided SDKs and drivers separately from the respective manufacturers.
+Users must obtain all required vendor-provided SDKs and drivers separately from the respective manufacturers (see the MCC Installation Manual).
 
 ## Running MCC
 
