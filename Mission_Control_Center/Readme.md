@@ -176,7 +176,9 @@ A separate written commercial license is generally required for commercial uses,
 For commercial licensing inquiries, please contact:
 
 Kiyotada Naitou
+
 Joint Faculty of Veterinary Medicine, Kagoshima University
+
 naitou.k.kagoshima@gmail.com
 
 See the following files for details:
