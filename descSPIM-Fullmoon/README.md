@@ -8,8 +8,7 @@ descSPIM-Fullmoon is a large-field-of-view light-sheet fluorescence microscope d
 
 The complete parts list and detailed assembly procedures are provided in the following files:
 
-* [Parts List](./20260318%20descSPIM-Fullmoon%20descSPIM-Fullmoon_part_list_20260515.xlsx
-)
+* [Parts List](./20260318%20descSPIM-Fullmoon%20descSPIM-Fullmoon_part_list_20260515.xlsx)
 * [Construction procedures](./20260318%20descSPIM-Fullmoon%20construction.pdf)
 
 Before beginning construction, review both documents and ensure that all required components are available.
