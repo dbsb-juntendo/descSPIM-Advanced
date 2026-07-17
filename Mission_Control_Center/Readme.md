@@ -20,6 +20,8 @@ Users must obtain all required vendor-provided SDKs and drivers separately from 
 
 After completing the installation and hardware configuration, launch MCC by double-clicking the MCC shortcut icon on the desktop.
 
+![MCC icon](assets/mcc-icon.png)
+
 ## Safety Notice
 
 MCC is research software and is not intended for clinical, diagnostic, or safety-critical applications.
@@ -175,9 +177,7 @@ A separate written commercial license is generally required for commercial uses,
 
 For commercial licensing inquiries, please contact:
 
-Kiyotada Naitou
-
-Joint Faculty of Veterinary Medicine, Kagoshima University
+Kiyotada Naitou, Joint Faculty of Veterinary Medicine, Kagoshima University
 
 naitou.k.kagoshima@gmail.com
 
