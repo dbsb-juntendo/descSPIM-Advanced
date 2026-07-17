@@ -1,6 +1,8 @@
-# camera_integration
+# camera_integration.py
+# -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-# TODO: Move_continuou を Movei modeに改名
 
 import ctypes
 from ctypes import (
@@ -11,15 +13,8 @@ from ctypes import (
 from enum import IntEnum
 import time
 
-#from camera_backend_base import ICameraBackend  # ← これを追加
-#from .camera_backend_base import ICameraBackend
 from camera_backends.camera_backend_base import ICameraBackend
 
-#from nikon_sdk import *
-#from nikon_sdk import NkcamEvent
-#from camera_backend_nikon import NikonDS50MBackend
-
-# camera_integration.py
 from PySide6.QtCore import Qt, QObject, Signal, Slot, QThread, QTimer,  QAbstractNativeEventFilter,QRectF, QPointF, QCoreApplication, QSettings, QEvent
 from PySide6.QtGui import QImage, QPixmap, QGuiApplication, QTransform, QPen, QBrush, QColor, QPainter
 import ctypes, time, os, csv, win32con
@@ -125,18 +120,11 @@ class RoiView(QGraphicsView):
         pix = QPixmap.fromImage(qimg)
         self.pixmap_item.setPixmap(pix)
         self.scene.setSceneRect(pix.rect())
-        
-        #self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
 
         # 初回だけ fill で合わせる
         if not hasattr(self, "_fitted_once"):
             self._fit_to_pixmap_fill()
             self._fitted_once = True
-
-        # 初回だけfitInView
-        #if not hasattr(self, "_fitted_once"):
-        #    self.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
-        #    self._fitted_once = True
 
     def _fit_to_pixmap_fill(self):
         # 回転後のpixmapがシーン上で占める矩形
@@ -313,7 +301,6 @@ class CaptureWorker(QObject):
     sig_record_status = Signal(str)
     sig_autostop = Signal(str)   # ← 自動停止通知
     sig_recording_stopped = Signal()
-    #sig_on_snapshot_ready = Signal()
     sig_snapshot_ready = Signal(object)
 
     def __init__(self, hcam, bits=8, backend: ICameraBackend | None = None):
@@ -371,19 +358,10 @@ class CaptureWorker(QObject):
         self._color_index: int = 0
         self._completed_steps: int = 0
 
-        #self._ram_frames_by_color: dict[str, list[np.ndarray]] = {}
-        #self._meta_by_color: dict[str, list[dict]] = {}
 
     #----------------
     # 1. 前提：状態フラグをセットするメソッド群
     #----------------
-
-    #@Slot(bool)
-    #def set_stage_link_enabled(self, enabled: bool):
-    #    print("[CaptureWorker] set_stage_link_enabled:", enabled)
-    #    """カメラ録画とステージを連動させるかどうかを切り替える"""
-    #    self._stage_link_enabled = bool(enabled)
-    #    print(f"[CaptureWorker] stage link enabled = {self._stage_link_enabled}")
 
     # ★ 追加: Auto-return の ON/OFF
     @Slot(bool)
@@ -495,10 +473,7 @@ class CaptureWorker(QObject):
             self.sig_record_status.emit("Recording to RAM...")
         except Exception:
             print("[CaptureWorker] stage_start SKIPPED (link_enabled=False)")   # デバッグ用
-        #try:
-        #    self.main._timing_logger.log_event("CAM_IO_ON")
-        #except Exception:
-        #    pass
+
 
     # STEPモードの開始は、ステッププログラムを引数で受け取るようにする
     @Slot()
@@ -528,176 +503,6 @@ class CaptureWorker(QObject):
         )
         self.sig_recording_stopped.emit()
 
-
-    """
-    @Slot()
-    def start_recording_ram_step(self):
-        print(f"[CaptureWorker] start_recording_step_mode")   # デバッグ用
-        if self._recording:
-            return
-        self._dtype = np.uint8 if self._bits == 8 else np.uint16
-        self._ram_frames.clear()
-        self._meta.clear()
-        self._ram_bytes = 0
-        self._last_seq = None
-        self._t0_wall_ns = time.time_ns()
-        self._t0_mono_ns = time.perf_counter_ns()
-        self._recording = True
-        self.main.stage_bridge.sig_reset_dda.emit()
-
-        # step同期フラグ初期化
-        self._step_waiting = False
-        self._step_inflight = False
-
-        self.sig_record_status.emit("Recording to RAM...")
-
-        # ★最初のstepを出す（以後は step_done → 100ms → capture → next step）
-        self._emit_step_once()
-
-
-    def _do_one_step(self):
-        try:
-            # ここで do_capture_snapshot() の戻り値を受け取る
-            snapshot = self.do_capture_snapshot()
-            if snapshot is None:
-                print("snapshot was None")
-                return
-
-            data  = snapshot["data"]
-            seq   = snapshot["seq"]
-            ts_us = snapshot["ts_us"]
-            exp_us = snapshot["exp_us"]
-
-            # このフレームをホスト側で受け取った時刻（高分解能）
-            host_ns = time.perf_counter_ns()
-
-            # ステージを 1 step 動かす
-
-            self.main.stage_bridge.sig_step_once.emit()
-            print("[CaptureWorker] emit stage_start")
-
-            arr = np.frombuffer(data, dtype=self._dtype).reshape(self._h, self._w).copy()
-            self._ram_frames.append(arr)
-            print(f"[CaptureWorker] append frame #{len(self._ram_frames)}")
-            self._ram_bytes += arr.nbytes
-
-            if self._t0_wall_ns is not None and self._t0_mono_ns is not None:
-                wall_ns = self._t0_wall_ns + (host_ns - self._t0_mono_ns)
-            else:
-                wall_ns = time.time_ns()
-
-            self._meta.append((seq, ts_us, host_ns, wall_ns, exp_us))
-
-            # ドロップ検出
-            if self._last_seq is not None and seq != self._last_seq + 1:
-                gap = seq - (self._last_seq + 1)
-                self.sig_record_status.emit(
-                    f"Frame drop detected: missed {gap} frame(s) (seq {self._last_seq} -> {seq})"
-                )
-            self._last_seq = seq
-
-            # RAM上限チェック
-            if self._ram_bytes > self._ram_limit:
-                msg = f"RAM limit reached ({self._ram_bytes/(1024**3):.2f} GB). Auto-stopped."
-                self.sig_record_status.emit(msg)
-                self.sig_autostop.emit(msg)
-                self.stop_recording_ram()
-                return
-
-            # フレーム数による自動停止
-            if self._auto_stop_enabled and self._auto_stop_frames > 0:
-                if len(self._ram_frames) >= self._auto_stop_frames:
-                    msg = f"Reached {self._auto_stop_frames} frames. Auto-stopped."
-                    self.sig_record_status.emit(msg)
-                    self.sig_autostop.emit(msg)
-                    self.stop_recording_ram()
-                    return
-
-        except Exception as e:
-            print(f"[ERROR] snapshot was missed: {e}")
-
-    def _step_loop(self):
-        #1回分の step 取得＋ステージ移動を実行し、次回も自分をスケジュールする
-        if not self._recording:
-            return  # 停止したら終了
-        self._do_one_step()  # ← 1 フレーム + 1 ステップの関数
-        QTimer.singleShot(0, self._step_loop)        # 次の step を Qt のイベントループにスケジュール
-
-
-    @Slot()
-    def on_stage_step_done(self):
-        # step録画中でなければ無視
-        if not self._recording or not self._step_waiting:
-            return
-
-        self._step_waiting = False
-
-        # 完了後 100ms 待ってから撮影
-        QTimer.singleShot(100, self._capture_after_step_done)
-
-
-    def _capture_after_step_done(self):
-        if not self._recording:
-            return
-
-        try:
-            snapshot = self.do_capture_snapshot()
-            if snapshot is None:
-                print("[CaptureWorker] snapshot was None after step_done")
-                # 次のstepは出す（止めたいならここでstopにしてもよい）
-                self._schedule_next_step()
-                return
-
-            data  = snapshot["data"]
-            seq   = snapshot["seq"]
-            ts_us = snapshot["ts_us"]
-            exp_us = snapshot["exp_us"]
-
-            host_ns = time.perf_counter_ns()
-
-            arr = np.frombuffer(data, dtype=self._dtype).reshape(self._h, self._w).copy()
-            self._ram_frames.append(arr)
-            print(f"[CaptureWorker] append frame #{len(self._ram_frames)}")
-            self._ram_bytes += arr.nbytes
-
-            if self._t0_wall_ns is not None and self._t0_mono_ns is not None:
-                wall_ns = self._t0_wall_ns + (host_ns - self._t0_mono_ns)
-            else:
-                wall_ns = time.time_ns()
-
-            self._meta.append((seq, ts_us, host_ns, wall_ns, exp_us))
-
-            # ドロップ検出
-            #if self._last_seq is not None and seq != self._last_seq + 1:
-            #    gap = seq - (self._last_seq + 1)
-            #    self.sig_record_status.emit(
-            #        f"Frame drop detected: missed {gap} frame(s) (seq {self._last_seq} -> {seq})"
-            #    )
-            #self._last_seq = seq
-
-            # RAM上限
-            if self._ram_bytes > self._ram_limit:
-                msg = f"RAM limit reached ({self._ram_bytes/(1024**3):.2f} GB). Auto-stopped."
-                self.sig_record_status.emit(msg)
-                self.sig_autostop.emit(msg)
-                self.stop_recording_ram()
-                return
-
-            # フレーム数による自動停止
-            if self._auto_stop_enabled and self._auto_stop_frames > 0:
-                if len(self._ram_frames) >= self._auto_stop_frames:
-                    msg = f"Reached {self._auto_stop_frames} frames. Auto-stopped."
-                    self.sig_record_status.emit(msg)
-                    self.sig_autostop.emit(msg)
-                    self.stop_recording_ram()
-                    return
-
-        except Exception as e:
-            print(f"[CaptureWorker] capture_after_step_done error: {e}")
-
-        self._schedule_next_step()
-
-    """
 
     @Slot(object)
     def start_recording_ram_step(self, step_program):
@@ -812,29 +617,6 @@ class CaptureWorker(QObject):
 
             self._meta.append((seq, ts_us, host_ns, wall_ns, exp_us))
 
-            """
-            self._ram_frames_by_color[color_name].append(arr)
-            self._ram_bytes += arr.nbytes
-
-            if self._t0_wall_ns is not None and self._t0_mono_ns is not None:
-                wall_ns = self._t0_wall_ns + (host_ns - self._t0_mono_ns)
-            else:
-                wall_ns = time.time_ns()
-
-            self._meta_by_color[color_name].append({
-                "seq": seq,
-                "ts_us": ts_us,
-                "host_ns": host_ns,
-                "wall_ns": wall_ns,
-                "exp_us": exp_us,
-                "step_index": self._completed_steps,
-                "color_index": self._color_index,
-                "color_name": color_name,
-                "laser": cfg["laser"],
-                "filter": cfg["filter"],
-            })
-            """
-
             if self._ram_bytes > self._ram_limit:
                 msg = f"RAM limit reached ({self._ram_bytes/(1024**3):.2f} GB). Auto-stopped."
                 self.sig_record_status.emit(msg)
@@ -924,59 +706,6 @@ class CaptureWorker(QObject):
         finally:
             # stage側で永遠に完了しない場合の保険を入れるならここでタイムアウトを仕込む
             self._step_inflight = False
-
-    """
-    @Slot()
-    def stop_recording_ram(self):
-        print(f"[CaptureWorker] stop_recording_ram: recording={self._recording}, n_frames={len(self._ram_frames)}")    #デバッグ用
-        
-        #print(      #ステージstep完了フラグのデバッグ用
-        #    "[WORKER_STOP]",
-        #    "recording=", self._recording,
-        #    "step_waiting=", getattr(self, "_step_waiting", None),
-        #    "step_inflight=", getattr(self, "_step_inflight", None),
-        #    "n_frames=", len(self._ram_frames),
-        #)
-
-        if not self._recording:
-            return
-
-        self._recording = False
-        n = len(self._ram_frames)
-        gb = self._ram_bytes / (1024**3)
-        self.sig_record_status.emit(f"Stopped. RAM buffered: {n} frames, {gb:.2f} GB")
-        self.sig_recording_stopped.emit()
-        #self._io_set_output(False)  # 録画終了=外部出力OFF
-
-
-    # multi color step recordingに対応した stop_recording_ram
-    @Slot()
-    def stop_recording_ram(self):
-        total_frames = len(self._ram_frames)
-
-        print(
-            f"[CaptureWorker] stop_recording_ram: "
-            f"recording={self._recording}, n_frames={total_frames}"
-        )
-
-        if not self._recording:
-            return
-
-        self._recording = False
-        self._step_waiting = False
-        self._step_inflight = False
-
-        try:
-            self._laser_all_off()
-        except Exception:
-            pass
-
-        gb = self._ram_bytes / (1024**3)
-        self.sig_record_status.emit(
-            f"Stopped. RAM buffered: {total_frames} frames, {gb:.2f} GB"
-        )
-        self.sig_recording_stopped.emit()
-        """
 
 
     # -----
@@ -1164,11 +893,6 @@ class StepColorProgramDialog(QDialog):
                     filter_index = j
             cmb_filter.setCurrentIndex(filter_index)
 
-            #cmb_name = QComboBox(self)
-            #cmb_name.setEditable(True)
-            #cmb_name.addItem(init.get("name", f"Color{i+1}"))
-            #cmb_name.setCurrentText(init.get("name", f"Color{i+1}"))
-
             name_edit = QLineEdit(self)
             name_edit.setText(init.get("name", f"Color{i+1}"))
 
@@ -1176,13 +900,11 @@ class StepColorProgramDialog(QDialog):
             spin_delay.setRange(0, 5000)
             spin_delay.setValue(int(init.get("switch_delay_ms", 50)))
 
-            #grid.addWidget(cmb_name, i + 1, 0)
             grid.addWidget(name_edit, i + 1, 0)
             grid.addWidget(cmb_laser, i + 1, 1)
             grid.addWidget(cmb_filter, i + 1, 2)
             grid.addWidget(spin_delay, i + 1, 3)
 
-            #self._rows.append((cmb_name, cmb_laser, cmb_filter, spin_delay))
             self._rows.append((name_edit, cmb_laser, cmb_filter, spin_delay))
 
         lay.addLayout(grid)
@@ -1206,8 +928,6 @@ class StepColorProgramDialog(QDialog):
         out = []
         seen = set()
 
-        #for cmb_name, cmb_laser, cmb_filter, spin_delay in self._rows:
-        #    color_name = cmb_name.currentText().strip() or "Color"
         for name_edit, cmb_laser, cmb_filter, spin_delay in self._rows:
             color_name = name_edit.text().strip() or "Color"
             laser_choice = cmb_laser.currentData()
@@ -1238,16 +958,13 @@ class CameraPane(QWidget):
     req_record_start_ram = Signal()
     req_record_start_ram_continuous = Signal()
 
-    #req_record_start_ram_step = Signal()
     req_record_start_ram_step = Signal(object)
 
     req_record_stop_ram = Signal()
     req_set_autostop = Signal(bool, int)
     req_capture_snapshot = Signal()
-    # ステージ連動フラグ
-    #req_set_stage_link = Signal(bool)
-    # Auto-return フラグ
-    req_set_auto_return = Signal(bool)
+
+    req_set_auto_return = Signal(bool)    # Auto-return フラグ
 
 
     def __init__(
@@ -1268,7 +985,6 @@ class CameraPane(QWidget):
         self.stage_bridge = None                 # set_stage_bridge() でセット
         self.backend: ICameraBackend | None = backend
         self._current_camera_key: str | None = None
-        #self.worker.sig_recording_stopped.connect(self._on_recording_stopped)
 
         self._settings = QSettings("LabSuite", "Camera")
         self.setWindowTitle("NKCAM Dispatcher (pause/resume)")
@@ -1451,9 +1167,6 @@ class CameraPane(QWidget):
         live_layout.addWidget(self.btn_save)
 
         # ---- Record / Auto-stop ----
-        #self.chk_record_arm = QCheckBox("Link stage")
-        #self.chk_record_arm.setChecked(False)
-
         self.btn_record = QPushButton("Start Recording")
         self.btn_record.setEnabled(False)
 
@@ -1471,7 +1184,6 @@ class CameraPane(QWidget):
         lbl_frames = QLabel("frames")
 
         record_autostop_layout = QHBoxLayout()
-        #record_autostop_layout.addWidget(self.chk_record_arm)
         record_autostop_layout.addWidget(self.btn_record)
         record_autostop_layout.addSpacing(8)
         record_autostop_layout.addWidget(self.chk_autostop)
@@ -1529,7 +1241,6 @@ class CameraPane(QWidget):
         panel = QWidget()
         panel.setLayout(self.form)
         self.form.setAlignment(Qt.AlignTop)
-        #panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
 
         # --------------------------------------------------
@@ -1829,14 +1540,7 @@ class CameraPane(QWidget):
         self.worker.sig_record_status.connect(self.on_record_status)
         self.btn_record.clicked.connect(self.on_click_record)
         self.worker.sig_recording_stopped.connect(self._on_worker_recording_stopped)
-        #self.worker.sig_on_snapshot_ready.connect(self.on_snapshot_ready, Qt.QueuedConnection)
         self.worker.sig_snapshot_ready.connect(self.on_snapshot_ready, Qt.QueuedConnection)
-
-        # ★ ステージ連動フラグ
-        #self.req_set_stage_link.connect(self.worker.set_stage_link_enabled, Qt.QueuedConnection)
-        #self.chk_record_arm.toggled.connect(self.on_link_stage_toggled)
-        # 初期状態を Worker に同期
-        #self.req_set_stage_link.emit(self.chk_record_arm.isChecked())
 
         # ★ Auto-return フラグ
         self.req_set_auto_return.connect(self.worker.set_auto_return_enabled, Qt.QueuedConnection)
@@ -1913,28 +1617,6 @@ class CameraPane(QWidget):
             print(f"[CameraPane] _update_stage_link_config error: {e}")
 
 
-    """
-    @Slot(bool)
-    def on_link_stage_toggled(self, v: bool):
-        print("[CameraPane] on_link_stage_toggled:", v)
-        #UI からのステージ連動 ON/OFF を Worker に伝える
-        self.req_set_stage_link.emit(v)
-
-        # ★ Link stage が OFF のときは Auto-return を強制 OFF + 無効化
-        if not v:
-            self.chk_auto_return.blockSignals(True)
-            self.chk_auto_return.setChecked(False)
-            self.chk_auto_return.blockSignals(False)
-            self.chk_auto_return.setEnabled(False)
-            self.req_set_auto_return.emit(False)
-        else:
-            # ON のときだけユーザーが触れる
-            self.chk_auto_return.setEnabled(True)
-
-        # ★ StageBridge にも現在設定を通知
-        self._update_stage_link_config()
-    """
-
     @Slot(bool)
     def on_auto_return_toggled(self, v: bool):
         # モードが STAGE_OFF のときは Auto-return は触らせない
@@ -1999,12 +1681,6 @@ class CameraPane(QWidget):
             self.btn_toggle.setStyleSheet(self._style_running_red)
             self._set_status("Running")
             
-            # ★ 録画中なら緑、そうでなければ赤
-            #if getattr(self, "_recording_active", False):
-            #    self.btn_toggle.setStyleSheet(self._style_recording_green)
-            #else:
-            #    self.btn_toggle.setStyleSheet(self._style_running_red)
-            #self._set_status("Running")
 
     def keyPressEvent(self, e):
         if e.key() == Qt.Key_P:
@@ -2175,6 +1851,8 @@ class CameraPane(QWidget):
                 w = img.width()
                 bpl = img.bytesPerLine()
                 ptr = img.bits()
+
+                """
                 ptr.setsize(bpl * h)
 
                 if img.format() == QImage.Format_Grayscale8:
@@ -2185,6 +1863,19 @@ class CameraPane(QWidget):
                     arr = np.frombuffer(ptr, dtype=np.uint16).reshape(h, bpl // 2)
                     arr = arr[:, :w]
                     tifffile.imwrite(path, arr)
+                    """
+                ptr = img.bits()
+
+                if img.format() == QImage.Format_Grayscale8:
+                    arr = np.frombuffer(ptr, dtype=np.uint8, count=bpl * h).reshape(h, bpl)
+                    arr = arr[:, :w].copy()
+                    tifffile.imwrite(path, arr)
+
+                elif img.format() == QImage.Format_Grayscale16:
+                    arr = np.frombuffer(ptr, dtype=np.uint16, count=(bpl * h) // 2).reshape(h, bpl // 2)
+                    arr = arr[:, :w].copy()
+                    tifffile.imwrite(path, arr)
+
                 else:
                     # 想定外フォーマットは QImage 側に任せる
                     img.save(path)
@@ -2222,8 +1913,6 @@ class CameraPane(QWidget):
 
         last_n = int(self._settings.value("step_multicolor/n_colors", 1))
 
-        #dlg1 = StepColorCountDialog(max_colors=len(laser_choices), parent=self)
-
         dlg1 = StepColorCountDialog(
             max_colors=len(laser_choices),
             parent=self,
@@ -2247,7 +1936,6 @@ class CameraPane(QWidget):
             parent=self,
             initial_program=last_program,
         )
-        #return dlg2.get_program()
 
         program = dlg2.get_program()
         if not program:
@@ -2262,15 +1950,11 @@ class CameraPane(QWidget):
         # 現在のステージモードを取得（なければ STAGE_OFF 扱い）
         mode = getattr(self, "_stage_link_mode", StageLinkMode.STAGE_OFF)
 
-        # STAGE_OFF 以外のときだけステージを連動させる
-        #stage_active = (mode != StageLinkMode.STAGE_OFF)
-
         if not self._is_recording:
             # ==== 録画開始 ====
             self._is_recording = True
             self.btn_record.setText("Stop")
             self.btn_record.setStyleSheet(self._style_running_red)
-            #self._on_recording_state_changed(True)
 
             if mode == StageLinkMode.STAGE_OFF:
                 if self._paused:
@@ -2293,24 +1977,6 @@ class CameraPane(QWidget):
                     self.req_record_start_ram_continuous.emit()    # 録画スタート、ステージスタートをWorkerに投げる（最小ジッタ）
                 except Exception:
                     pass
-
-                """
-            elif mode == StageLinkMode.STEP:
-                try:
-                    # STEP開始前にストリームを止める（混入防止）
-                    backend = getattr(self, "backend", None)
-                    if backend is not None and hasattr(backend, "stop_stream"):
-                        backend.stop_stream()
-
-                    #self.btn_toggle.setStyleSheet(self._style_recording_green)  # Live Viewボタンを緑
-                    if not self._paused:
-                        self.set_paused(True)
-                        self.btn_toggle.setStyleSheet("")  # Live Viewボタンを緑
-                    self.stage_bridge.sig_recording_state.emit(True)    # start(test)ボタンを緑にしてる
-                    self.req_record_start_ram_step.emit()    # step recording startをworkerに投げる
-                except Exception:
-                    pass
-                """
 
             elif mode == StageLinkMode.STEP:
                 try:
@@ -2364,7 +2030,6 @@ class CameraPane(QWidget):
             self.btn_record.setStyleSheet("")
             self.btn_toggle.setStyleSheet("")  # Live Viewボタンを戻す（step用）
             self.stage_bridge.sig_recording_state.emit(False)
-            #self._on_recording_state_changed(False)
 
             if not self._paused:
                 self.set_paused(True)
@@ -2503,11 +2168,7 @@ class CameraPane(QWidget):
             self.btn_record.setText("Start Recording")
             self.btn_record.setStyleSheet("")  # ← ここもデフォルトに戻す
 
-        # ★ Link stage の状態を確認
-        #link_stage = self.chk_record_arm.isChecked()
-
         # ★ Auto-stop 時も録画終了を通知（Link stage が ON のときだけ）
-        #if link_stage:
         if getattr(self, "_stage_link_mode") != StageLinkMode.STAGE_OFF:
             try:
                 if self.stage_bridge is not None:

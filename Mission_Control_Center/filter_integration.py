@@ -1,4 +1,8 @@
-# # -*- coding: utf-8 -*-
+# filter_integration.py
+# -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 """
 filter_integration.py
 

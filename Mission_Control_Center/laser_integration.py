@@ -1,5 +1,9 @@
 # laser_integration.py
 # -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+
 from __future__ import annotations
 
 from dataclasses import dataclass

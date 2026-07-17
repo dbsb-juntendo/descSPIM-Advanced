@@ -12,7 +12,7 @@ The **Mission Control Center (MCC)** is unified control framework for descSPIM-b
 
 Detailed instructions for installing MCC, setting up the Python environment, installing vendor-provided SDKs and drivers, configuring connected devices, and launching the application are provided in the instruction manual:
 
-* [MCC Installation Manual](https://github.com/dbsb-juntendo/descSPIM-Advanced/blob/main/Mission_Control_Center/20251217%20Mission%20Control%20Center%20Installation%20Manual.pdf)
+* [MCC Installation and Operation Manual](https://github.com/dbsb-juntendo/descSPIM-Advanced/blob/main/Mission_Control_Center/20251217%20Mission%20Control%20Center%20Installation%20Manual.pdf)
 
 Users must obtain all required vendor-provided SDKs and drivers separately from the respective manufacturers (see the MCC Installation Manual).
 
@@ -102,8 +102,8 @@ The physical devices controlled by MCC include cameras, motorized stages, laser 
 
 | Manufacturer | Model / Series                            | Control Interface |
 | ------------ | ----------------------------------------- | ----------------- |
-| Thorlabs     | KDC101 with DC servo motor actuator       | XA SDK            |
-| Thorlabs     | KST101 with ZFS25B stepper motor actuator | XA SDK            |
+| Thorlabs     | KDC101 with Z825B DC servo motor actuator | XA SDK            |
+| Thorlabs     | KST101 with ZFS25B stepper motor actuator | Kinesis SDK       |
 
 ### Laser Sources
 

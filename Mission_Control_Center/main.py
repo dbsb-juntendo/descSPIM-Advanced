@@ -1,5 +1,9 @@
 # main.py
 # -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+
 import sys
 from typing import List, Optional
 

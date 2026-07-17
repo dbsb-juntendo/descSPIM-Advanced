@@ -1,5 +1,9 @@
 # stage_integration.py
 # -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+
 from dataclasses import dataclass, field
 from typing import List, Dict, Tuple, Optional
 import json
@@ -952,7 +956,6 @@ class StagePanel(QtWidgets.QGroupBox):
         self._test_running = False
         self._fwd_running = False
         self._rev_running = False
-        #self._prev_acq_dirs: Optional[Tuple[str, str]] = None  # (sample_dir, camera_dir)
         self._acq_reverse_for_next_start: bool = False
 
         # 個別 Jog 状態
@@ -1947,7 +1950,6 @@ class StagePanel(QtWidgets.QGroupBox):
                 step_dir = StepDirection.REVERSE
                 dir_idx = 1
 
-            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
             backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
             backend.step(step_dir)
 
@@ -2011,7 +2013,6 @@ class StagePanel(QtWidgets.QGroupBox):
             if not self._test_running:
                 # 正方向（reverse=False）で Move プロファイルを適用
                 self._acq_reverse_for_next_start = False
-                #self._apply_profiles_to_backends(reverse=False)
                 self.bridge.sig_stage_start.emit()
                 self._test_running = True
                 self.btn_startstop.setText("Stop (test)")
@@ -2161,7 +2162,6 @@ class StagePanel(QtWidgets.QGroupBox):
         dir_idx = 0 if dir_char == "F" else 1
 
         try:
-            #backend.apply_params(p.v_move, p.acc_move, dir_idx)
             backend.apply_move_params(p.v_move, p.acc_move, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
@@ -2183,7 +2183,6 @@ class StagePanel(QtWidgets.QGroupBox):
         dir_idx = 0 if p.dir == "F" else 1
 
         try:
-            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
             backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
             backend.reset_step_dda_err()
         except Exception as e:
@@ -2454,7 +2453,6 @@ class StagePanel(QtWidgets.QGroupBox):
         p = axis_state.ctl_profile
         dir_idx = 0 if p.dir == "F" else 1
         try:
-            #backend.apply_params(p.v_move, p.acc_move, dir_idx)
             backend.apply_move_params(p.v_move, p.acc_move, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":
@@ -2476,7 +2474,6 @@ class StagePanel(QtWidgets.QGroupBox):
         dir_idx = 0 if p.dir == "F" else 1
 
         try:
-            #backend.configure_step(p.step, p.v_step, p.acc_step, dir_idx)
             backend.apply_step_params(p.step, p.v_step, p.acc_step, dir_idx)
         except Exception as e:
             if axis_state.axis_name == "Sample":

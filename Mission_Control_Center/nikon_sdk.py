@@ -1,4 +1,9 @@
 # nikon_sdk.py
+# -*- coding: utf-8 -*-
+# Copyright © 2026 Kiyotada Naitou
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+
 import ctypes
 from ctypes import (
     c_int, c_uint, c_ushort, c_ubyte, c_short, c_uint64, c_float,

@@ -1,0 +1,25 @@
+@echo off
+
+echo @echo off > "%~dp0run_app.bat"
+echo cd /d "%%~dp0\.." >> "%~dp0run_app.bat"
+echo ".myenv-descSPIM-MCC\Scripts\python.exe" "Main.py" >> "%~dp0run_app.bat"
+
+set "TARGET=%~dp0run_app.bat"
+set "SHORTCUT=%USERPROFILE%\Desktop\descSPIM-MCC.lnk"
+set "ICON=%~dp0MCC.ico"
+set "VBS=%TEMP%\_tmp_descspim_%RANDOM%.vbs"
+
+> "%VBS%" echo Set oWS = WScript.CreateObject("WScript.Shell")
+>> "%VBS%" echo Set lnk = oWS.CreateShortcut("%SHORTCUT%")
+>> "%VBS%" echo lnk.TargetPath = "%TARGET%"
+>> "%VBS%" echo lnk.WorkingDirectory = "%~dp0\.."
+>> "%VBS%" echo lnk.IconLocation = "%ICON%"
+>> "%VBS%" echo lnk.WindowStyle = 1
+>> "%VBS%" echo lnk.Save
+
+cscript //nologo "%VBS%"
+del "%VBS%"
+
+echo Shortcut has been created:
+echo   %SHORTCUT%
+pause
