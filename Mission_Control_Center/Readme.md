@@ -20,7 +20,7 @@ Users must obtain all required vendor-provided SDKs and drivers separately from 
 
 After completing the installation and hardware configuration, launch MCC by double-clicking the MCC shortcut icon on the desktop.
 
-![MCC icon](assets/mcc-icon.png)
+![MCC icon](assets/MCC-icon.png)
 
 ## Safety Notice
 
