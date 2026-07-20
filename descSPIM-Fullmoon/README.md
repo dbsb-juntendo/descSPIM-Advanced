@@ -25,6 +25,17 @@ MCC provides coordinated control of the camera, motorized stages, laser source, 
 
 descSPIM-Fullmoon is a research instrument and is not intended for clinical, diagnostic, or safety-critical applications. Users are responsible for verifying the safety, compatibility, alignment, and operation of all components. Follow the safety instructions and operating limits provided by each equipment manufacturer.
 
-## License
+## Copyright and License
 
-For licensing terms, see the [main descSPIM-Advanced README](../README.md).
+descSPIM-Fullmoon was developed by Kiyotada Naitou and contributed to the descSPIM-Advanced platform.
+
+Copyright © 2026 Kiyotada Naitou.
+
+Unless otherwise noted, the materials in this directory are licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+
+For additional licensing information, see the [main descSPIM-Advanced README](../README.md).
+
+For commercial use or other licensing inquiries, please contact:
+
+Kiyotada Naitou
+[naitou.k.kagoshima@gmail.com](mailto:naitou.k.kagoshima@gmail.com)
