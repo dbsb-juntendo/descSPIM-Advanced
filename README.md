@@ -146,6 +146,8 @@ By using **descSPIM-Advanced**, you agree to the following:
 - The authors are not responsible for damages or misuse.
 - All disputes shall be governed by Japanese law.
 
+The MCC software is licensed separately. See the MCC directory for its applicable license terms.
+
 ---
 
 ## References
