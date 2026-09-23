@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+import os
+from pathlib import Path
+import sys
+from typing import Any
 import time
 
 from PySide6.QtCore import QObject, Signal, Qt, QTimer
@@ -15,20 +18,60 @@ from .camera_backend_base import ICameraBackend
 
 import numpy as np
 
-try:
-    # Thorlabs TSI SDK
-    from thorlabs_tsi_sdk.tl_camera import TLCameraSDK, OPERATION_MODE
-except ImportError:
-    TLCameraSDK = None
-    OPERATION_MODE = None
+# Optional SDK symbols are intentionally loaded only when the user connects this
+# backend.  camera_integration.scan_camera_backends() imports every backend at
+# application startup, so importing the vendor SDK here would make optional
+# hardware a startup dependency.
+TLCameraSDK = None
+OPERATION_MODE = None
+ROI = None
+_TSI_DLL_DIRECTORY_HANDLE = None
 
-# 先頭の import に ROI を追加
-try:
-    # Thorlabs TSI SDK
-    from thorlabs_tsi_sdk.tl_camera import TLCameraSDK, ROI
-except ImportError:
-    TLCameraSDK = None
-    ROI = None
+
+def _load_thorlabs_sdk() -> None:
+    """Prepare the native runtime and import the optional Thorlabs SDK lazily."""
+    global TLCameraSDK, OPERATION_MODE, ROI, _TSI_DLL_DIRECTORY_HANDLE
+
+    if TLCameraSDK is not None and OPERATION_MODE is not None and ROI is not None:
+        return
+
+    if os.name != "nt":
+        raise RuntimeError("The Thorlabs TSI camera backend requires Windows.")
+    if sys.maxsize <= 2**32:
+        raise RuntimeError("The MCC installation requires 64-bit Python.")
+
+    dll_directory = Path(__file__).resolve().parents[1] / "dlls" / "64_lib"
+    if not dll_directory.is_dir():
+        raise RuntimeError(
+            "Thorlabs native DLL directory not found: "
+            f"{dll_directory}. Follow the installation manual and copy the "
+            "64-bit Native Toolkit DLLs to MCC\\dlls\\64_lib."
+        )
+    if not any(dll_directory.glob("*.dll")):
+        raise RuntimeError(f"No Thorlabs native DLLs found in: {dll_directory}")
+
+    dll_directory_text = str(dll_directory)
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    if dll_directory_text not in path_entries:
+        os.environ["PATH"] = dll_directory_text + os.pathsep + os.environ.get("PATH", "")
+
+    # Keep the returned handle alive for as long as the imported SDK can need
+    # this search directory. Closing or releasing it removes the registration.
+    dll_handle = os.add_dll_directory(dll_directory_text)
+    try:
+        from thorlabs_tsi_sdk.tl_camera import (
+            OPERATION_MODE as _OPERATION_MODE,
+            ROI as _ROI,
+            TLCameraSDK as _TLCameraSDK,
+        )
+    except Exception:
+        dll_handle.close()
+        raise
+
+    _TSI_DLL_DIRECTORY_HANDLE = dll_handle
+    TLCameraSDK = _TLCameraSDK
+    OPERATION_MODE = _OPERATION_MODE
+    ROI = _ROI
 
 
 class ThorlabsTLCameraBackend(ICameraBackend):
@@ -51,7 +94,7 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         self._pane: Any = parent          # CameraPane
         self._worker: Any = None          # CaptureWorker
 
-        self._sdk: Optional[TLCameraSDK] = None
+        self._sdk: Any | None = None
         self._cam: Any = None             # 実際の TLCamera インスタンス
 
         self._width: int = 0
@@ -100,21 +143,6 @@ class ThorlabsTLCameraBackend(ICameraBackend):
     # -------------------------------------------------
     # connect / disconnect
     # -------------------------------------------------
-    def _configure_dll_path(self) -> None:
-        """
-        Thorlabs の Python SDK の windows_setup.py があれば DLL パスを通す。
-        無ければ何もしない。
-        """
-        try:
-            from windows_setup import configure_path  # type: ignore
-        except ImportError:
-            return
-
-        try:
-            configure_path()
-        except Exception as e:
-            print(f"[ThorlabsTLCameraBackend] configure_path() error: {e}")
-
     def _update_ranges_from_camera(self) -> None:
         """
         SDK から gain / exposure のレンジを一度だけ読み出してキャッシュする。
@@ -164,16 +192,25 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         if pane is None:
             return False
 
-        if TLCameraSDK is None:
-            print("[ThorlabsTLCameraBackend] thorlabs_tsi_sdk が見つかりません。")
+        try:
+            _load_thorlabs_sdk()
+        except Exception as e:
+            message = f"Thorlabs camera runtime could not be loaded: {e}"
+            print(f"[ThorlabsTLCameraBackend] {message}")
+            try:
+                if hasattr(pane, "_set_status"):
+                    pane._set_status(message)
+                elif hasattr(pane, "lbl_status"):
+                    pane.lbl_status.setText(message)
+            except Exception:
+                pass
             return False
+
+        assert TLCameraSDK is not None
 
         # すでに接続済みなら何もしない
         if getattr(pane, "hcam", None):
             return True
-
-        # DLL パス設定（存在すれば）
-        self._configure_dll_path()
 
         try:
             self._sdk = TLCameraSDK()
