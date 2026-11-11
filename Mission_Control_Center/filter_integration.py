@@ -32,14 +32,6 @@ from filter_backends.filter_backend_base import IFilterBackend
 FOCUS_CORRECTION_VELOCITY_MM_S = 1.5
 FOCUS_CORRECTION_ACCELERATION_MM_S2 = 0.5
 
-# Camera-stage restoration defaults after focus correction (mm/s and mm/s^2).
-# Used only when the existing QSettings keys "stage_v2_mm_s" and
-# "stage_a2_mm_s2", respectively, are absent. Saved values take precedence;
-# these defaults are not a readback of the stage's current motion settings.
-FOCUS_RESTORE_DEFAULT_VELOCITY_MM_S = 0.01368
-FOCUS_RESTORE_DEFAULT_ACCELERATION_MM_S2 = 1.5
-
-
 SETTINGS_PREFIX_FOCUS = "Filters"
 SETTINGS_PREFIX_PANE = "FilterPane"
 
@@ -276,10 +268,18 @@ class FilterController(QObject):
             )
 
     @Slot(str, str)
-    def apply_delta_mm(self, from_wl: str, to_wl: str):
+    @Slot(str, str, object)
+    def apply_delta_mm(
+        self,
+        from_wl: str,
+        to_wl: str,
+        restore_motion_params: Optional[Tuple[float, float]] = None,
+    ):
         """
         「from フィルタ」と「to フィルタ」の登録位置の差分だけを動かす。
         - どちらか一方でも未登録なら、ステージは動かさずエラーだけ出す。
+        - restore_motion_params は StagePanel の録画用 Acquisition 設定
+          (速度 mm/s, 加速度 mm/s^2)。補正前に退避し、終了時に復元する。
         """
         try:
             if self.camera is None:
@@ -302,19 +302,19 @@ class FilterController(QObject):
                 )
                 return
 
+            # Snapshot the GUI-confirmed Acquisition settings supplied by
+            # StagePanel, independently of manual operation or legacy defaults.
+            # Without a restore target, do not change the device's settings.
+            if restore_motion_params is None:
+                raise RuntimeError("camera Acquisition settings unavailable for focus restoration")
+            v_orig, a_orig = (float(value) for value in restore_motion_params)
+
             label = f"{from_wl}→{to_wl}"
             cur = int(self._get_current_count())
 
             from xa_sdk.shared.tlmc_type_structures import (  # type: ignore
                 TLMC_ScaleType,
                 TLMC_Unit,
-            )
-
-            v_orig = self.settings.value(
-                "stage_v2_mm_s", FOCUS_RESTORE_DEFAULT_VELOCITY_MM_S, float
-            )
-            a_orig = self.settings.value(
-                "stage_a2_mm_s2", FOCUS_RESTORE_DEFAULT_ACCELERATION_MM_S2, float
             )
 
             fast_applied = False

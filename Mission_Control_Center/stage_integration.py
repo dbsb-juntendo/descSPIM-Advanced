@@ -2512,6 +2512,18 @@ class StagePanel(QtWidgets.QGroupBox):
         if self.backend_camera is None:
             return None
         return getattr(self.backend_camera, "device", None)
+
+    def get_camera_acquisition_motion_params(self) -> Tuple[float, float]:
+        """Snapshot the selected Camera Acquisition velocity/acceleration.
+
+        Use the GUI-confirmed profile in memory, including its Move/Step mode.
+        Focus correction always restores recording settings, independently of
+        the last manual operation, backend cache, or saved legacy preferences.
+        """
+        profile = self.camera_state.acq_profile
+        if profile.mode == "Step":
+            return float(profile.v_step), float(profile.acc_step)
+        return float(profile.v_move), float(profile.acc_move)
     
     def _apply_ctl_profile_to_backend(self, axis_state: AxisState,
                                       backend: Optional[IStageBackend],

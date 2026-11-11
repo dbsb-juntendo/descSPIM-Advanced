@@ -278,7 +278,11 @@ class MainWindow(QMainWindow):
                 return
 
             # 常に「登録位置間の差分」のみで移動
-            focus_ctl.apply_delta_mm(from_label, to_label)
+            focus_ctl.apply_delta_mm(
+                from_label,
+                to_label,
+                self.stage_pane.get_camera_acquisition_motion_params(),
+            )
 
             # 今回を「前回のラベル」として記録
             self._last_filter_label = to_label
