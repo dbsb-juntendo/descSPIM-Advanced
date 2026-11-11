@@ -25,6 +25,23 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+# Laser power input precision and arrow-key/button increment, in mW.
+# The input range is obtained from backend.get_power_range() on construction.
+LASER_POWER_INPUT_DECIMALS = 1
+LASER_POWER_INPUT_STEP_MW = 0.5
+
+# Value supplied to the input field if reading the current power fails.
+# The widget still applies its existing range and rounding; this does not
+# send a power command to the device.
+LASER_POWER_READ_FAILURE_VALUE_MW = 0.0
+
+# Limits used to clip a saved power value only if get_power_range() fails
+# during restoration. They do not replace the widget's backend-derived range.
+# Restoring a saved value updates the GUI with signals blocked and does not
+# write to the device.
+LASER_SAVED_POWER_FALLBACK_MIN_MW = 0.0
+LASER_SAVED_POWER_FALLBACK_MAX_MW = 1000.0
+
 
 # backend モジュール探索用ディレクトリ
 LASER_BACKEND_MODULE_DIR = pathlib.Path(__file__).parent / "laser_backends"
@@ -99,11 +116,10 @@ class LaserLineControl(QtWidgets.QWidget):
         self.lbl_name = QtWidgets.QLabel(f"{dev_label} / {name}")
         self.chk_on = QtWidgets.QCheckBox("ON")
         self.spin_power = QtWidgets.QDoubleSpinBox()
-        #self.spin_power.setRange(0.0, 1000.0)
         lo, hi = self._backend.get_power_range(self._line_id)
         self.spin_power.setRange(lo, hi)
-        self.spin_power.setDecimals(1)
-        self.spin_power.setSingleStep(0.5)
+        self.spin_power.setDecimals(LASER_POWER_INPUT_DECIMALS)
+        self.spin_power.setSingleStep(LASER_POWER_INPUT_STEP_MW)
         self.spin_power.setSuffix(" mW")
         self.btn_set = QtWidgets.QPushButton("Set")
 
@@ -133,7 +149,7 @@ class LaserLineControl(QtWidgets.QWidget):
         try:
             p = float(self._backend.get_power_mw(self._line_id))
         except Exception:
-            p = 0.0
+            p = LASER_POWER_READ_FAILURE_VALUE_MW
 
         self.chk_on.blockSignals(True)
         self.chk_on.setChecked(on)
@@ -166,7 +182,7 @@ class LaserLineControl(QtWidgets.QWidget):
         try:
             lo, hi = self._backend.get_power_range(self._line_id)
         except Exception:
-            lo, hi = 0.0, 1000.0
+            lo, hi = LASER_SAVED_POWER_FALLBACK_MIN_MW, LASER_SAVED_POWER_FALLBACK_MAX_MW
 
         p = max(lo, min(hi, float(val)))  # レンジ内にクリップ
 

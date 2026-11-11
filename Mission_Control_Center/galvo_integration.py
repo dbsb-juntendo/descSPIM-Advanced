@@ -23,6 +23,37 @@ logger = logging.getLogger(__name__)
 BACKENDS_PACKAGE = "galvo_backends"
 
 
+# Frequency limits for the shared galvo UI, in Hz. These are the existing
+# application limits, not hardware ratings discovered from the connected device.
+GALVO_FREQUENCY_LIMITS_HZ = {
+    "sine": 250.0,
+    "square": 100.0,
+    "triangle": 175.0,
+    "sawtooth": 175.0,
+}
+GALVO_FREQUENCY_MIN_HZ = 0.0
+# Initial widget maximum, before the selected waveform's limit is applied.
+GALVO_FREQUENCY_INITIAL_MAX_HZ = 250.0
+# Existing maximum used when a waveform is absent from the table above.
+GALVO_FREQUENCY_FALLBACK_MAX_HZ = 100.0
+
+# Amplitude is passed unchanged to backend.set_amp() in peak-to-peak volts
+# (Vpp). The existing input-field suffix "V" is retained. Offset is in volts.
+GALVO_AMPLITUDE_MIN_VPP = 0.0
+GALVO_AMPLITUDE_MAX_VPP = 10.0
+GALVO_OFFSET_MIN_V = -10.0
+GALVO_OFFSET_MAX_V = 10.0
+
+# Initial widget values only: backend state is applied next, then saved
+# QSettings values, followed by the selected waveform's frequency limit.
+GALVO_FREQUENCY_DEFAULT_HZ = 100.0
+GALVO_AMPLITUDE_DEFAULT_VPP = 5.0
+GALVO_OFFSET_DEFAULT_V = 0.0
+
+# Decimal places in the frequency, amplitude, and offset input fields.
+GALVO_INPUT_DECIMALS = 3
+
+
 # ===== backend 自動検出 =====
 
 def scan_galvo_backends() -> Dict[str, Type[IGalvoBackend]]:
@@ -122,12 +153,7 @@ class GalvoPane(QtWidgets.QGroupBox):
     Multiple backends / multiple devices can be connected simultaneously.
     """
 
-    FREQ_LIMITS = {
-        "sine": 250.0,      # DC–250 Hz
-        "square": 100.0,    # DC–100 Hz
-        "triangle": 175.0,  # DC–175 Hz
-        "sawtooth": 175.0,  # DC–175 Hz
-    }
+    FREQ_LIMITS = GALVO_FREQUENCY_LIMITS_HZ
 
     sig_status = QtCore.Signal(str)
 
@@ -338,23 +364,23 @@ class GalvoPane(QtWidgets.QGroupBox):
 
             # frequency
             freq_spin = QtWidgets.QDoubleSpinBox()
-            freq_spin.setDecimals(3)
-            freq_spin.setRange(0.0, 250.0)
-            freq_spin.setValue(100.0)
+            freq_spin.setDecimals(GALVO_INPUT_DECIMALS)
+            freq_spin.setRange(GALVO_FREQUENCY_MIN_HZ, GALVO_FREQUENCY_INITIAL_MAX_HZ)
+            freq_spin.setValue(GALVO_FREQUENCY_DEFAULT_HZ)
             freq_spin.setSuffix(" Hz")
 
             # amplitude
             amp_spin = QtWidgets.QDoubleSpinBox()
-            amp_spin.setDecimals(3)
-            amp_spin.setRange(0.0, 10.0)  # ±12.5° × 0.8 V/deg ≒ 10 V peak
-            amp_spin.setValue(5.0)
+            amp_spin.setDecimals(GALVO_INPUT_DECIMALS)
+            amp_spin.setRange(GALVO_AMPLITUDE_MIN_VPP, GALVO_AMPLITUDE_MAX_VPP)
+            amp_spin.setValue(GALVO_AMPLITUDE_DEFAULT_VPP)
             amp_spin.setSuffix(" V")
 
             # offset
             offset_spin = QtWidgets.QDoubleSpinBox()
-            offset_spin.setDecimals(3)
-            offset_spin.setRange(-10.0, 10.0)
-            offset_spin.setValue(0.0)
+            offset_spin.setDecimals(GALVO_INPUT_DECIMALS)
+            offset_spin.setRange(GALVO_OFFSET_MIN_V, GALVO_OFFSET_MAX_V)
+            offset_spin.setValue(GALVO_OFFSET_DEFAULT_V)
             offset_spin.setSuffix(" V")
 
             grid.addWidget(enable_btn,  row_offset, 0)
@@ -554,10 +580,10 @@ class GalvoPane(QtWidgets.QGroupBox):
     # ===== frequency limit =====
 
     def _update_freq_limit(self, entry: ChannelWidgetEntry, wave: str) -> None:
-        max_f = float(self.FREQ_LIMITS.get(wave, 100.0))
+        max_f = float(self.FREQ_LIMITS.get(wave, GALVO_FREQUENCY_FALLBACK_MAX_HZ))
         spin = entry.freq_spin
         current = spin.value()
-        spin.setRange(0.0, max_f)
+        spin.setRange(GALVO_FREQUENCY_MIN_HZ, max_f)
         if current > max_f:
             spin.setValue(max_f)
 

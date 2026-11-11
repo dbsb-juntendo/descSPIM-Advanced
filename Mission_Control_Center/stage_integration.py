@@ -19,6 +19,75 @@ from timing_logger import TimingLogger
 
 from enum import IntEnum
 
+# StageSettingsDialog input ranges and decimal places, shared by the Sample
+# and Camera axes and their Acquisition/Control editors. Velocity and
+# acceleration settings apply to both Move and Step fields. These are GUI
+# limits, not hardware capabilities or default motion-profile values.
+STAGE_VELOCITY_MIN_MM_S = 0.0
+STAGE_VELOCITY_MAX_MM_S = 100.0
+STAGE_VELOCITY_DECIMALS = 5
+
+STAGE_ACCELERATION_MIN_MM_S2 = 0.0
+STAGE_ACCELERATION_MAX_MM_S2 = 1000.0
+STAGE_ACCELERATION_DECIMALS = 3
+
+STAGE_STEP_MIN_MM = 0.0
+STAGE_STEP_MAX_MM = 10.0
+STAGE_STEP_DECIMALS = 6
+
+# Profiles, presets and recent values still pass through the existing widgets'
+# clamping and rounding when loaded; their serialization format is unchanged.
+
+# Maximum Recent entries per axis and profile type (Sample/Camera x Acq/Ctl).
+# Loaded history keeps its existing order. New profiles are prepended, with
+# consecutive duplicates skipped; this limit does not apply to presets.
+STAGE_RECENT_HISTORY_LIMIT = 5
+
+# Shared StageProfile constructor defaults, also used by the existing profile
+# and preset restoration code when it creates a default profile. Mode uses
+# "Move" / "Step"; direction uses "F" / "R". The four startup profiles below
+# use this same initial mode and direction, with their own numeric defaults.
+STAGE_PROFILE_DEFAULT_MODE = "Move"
+STAGE_PROFILE_DEFAULT_DIRECTION = "F"
+STAGE_PROFILE_DEFAULT_MOVE_VELOCITY_MM_S = 1.0
+STAGE_PROFILE_DEFAULT_MOVE_ACCELERATION_MM_S2 = 1.5
+STAGE_PROFILE_DEFAULT_STEP_VELOCITY_MM_S = 1.0
+STAGE_PROFILE_DEFAULT_STEP_ACCELERATION_MM_S2 = 1.5
+STAGE_PROFILE_DEFAULT_STEP_MM = 0.010
+
+# StagePanel startup values for Sample/Camera x Acquisition/Control. These
+# seed the initial profiles before _load_prefs() restores saved settings.
+# Existing saved values and legacy-key fallback rules retain priority. Move
+# and Step have separate constants so each motion parameter is documented.
+
+# Sample axis: Acquisition (recording).
+SAMPLE_ACQ_DEFAULT_MOVE_VELOCITY_MM_S = 0.0400
+SAMPLE_ACQ_DEFAULT_MOVE_ACCELERATION_MM_S2 = 1.5
+SAMPLE_ACQ_DEFAULT_STEP_VELOCITY_MM_S = 0.0400
+SAMPLE_ACQ_DEFAULT_STEP_ACCELERATION_MM_S2 = 1.5
+SAMPLE_ACQ_DEFAULT_STEP_MM = 0.010
+
+# Camera axis: Acquisition (recording).
+CAMERA_ACQ_DEFAULT_MOVE_VELOCITY_MM_S = 0.01368
+CAMERA_ACQ_DEFAULT_MOVE_ACCELERATION_MM_S2 = 1.5
+CAMERA_ACQ_DEFAULT_STEP_VELOCITY_MM_S = 0.01368
+CAMERA_ACQ_DEFAULT_STEP_ACCELERATION_MM_S2 = 1.5
+CAMERA_ACQ_DEFAULT_STEP_MM = 0.010
+
+# Sample axis: Control (manual operation).
+SAMPLE_CTL_DEFAULT_MOVE_VELOCITY_MM_S = 1.0
+SAMPLE_CTL_DEFAULT_MOVE_ACCELERATION_MM_S2 = 1.5
+SAMPLE_CTL_DEFAULT_STEP_VELOCITY_MM_S = 1.0
+SAMPLE_CTL_DEFAULT_STEP_ACCELERATION_MM_S2 = 1.5
+SAMPLE_CTL_DEFAULT_STEP_MM = 0.010
+
+# Camera axis: Control (manual operation).
+CAMERA_CTL_DEFAULT_MOVE_VELOCITY_MM_S = 1.0
+CAMERA_CTL_DEFAULT_MOVE_ACCELERATION_MM_S2 = 1.5
+CAMERA_CTL_DEFAULT_STEP_VELOCITY_MM_S = 1.0
+CAMERA_CTL_DEFAULT_STEP_ACCELERATION_MM_S2 = 1.5
+CAMERA_CTL_DEFAULT_STEP_MM = 0.020
+
 """
 【 1軸（上向き / 下向き / Home / Step / Jog）】
 btn_sample_disconnect
@@ -228,13 +297,13 @@ def scan_stage_backends():
 # ------------------------------
 @dataclass
 class StageProfile:
-    mode: str = "Move"        # Acq 用: "Move" / "Step"
-    v_move: float = 1.0       # Move 用 velocity (mm/s)
-    acc_move: float = 1.5     # Move 用 accel (mm/s^2)
-    v_step: float = 1.0       # Step 用 velocity (mm/s)
-    acc_step: float = 1.5     # Step 用 accel (mm/s^2)
-    step: float = 0.010       # Step size (mm)
-    dir: str = "F"            # "F" or "R"
+    mode: str = STAGE_PROFILE_DEFAULT_MODE                          # Acq 用: "Move" / "Step"
+    v_move: float = STAGE_PROFILE_DEFAULT_MOVE_VELOCITY_MM_S         # Move 用 velocity (mm/s)
+    acc_move: float = STAGE_PROFILE_DEFAULT_MOVE_ACCELERATION_MM_S2  # Move 用 accel (mm/s^2)
+    v_step: float = STAGE_PROFILE_DEFAULT_STEP_VELOCITY_MM_S          # Step 用 velocity (mm/s)
+    acc_step: float = STAGE_PROFILE_DEFAULT_STEP_ACCELERATION_MM_S2  # Step 用 accel (mm/s^2)
+    step: float = STAGE_PROFILE_DEFAULT_STEP_MM                      # Step size (mm)
+    dir: str = STAGE_PROFILE_DEFAULT_DIRECTION                      # "F" or "R"
 
 
 @dataclass
@@ -349,8 +418,8 @@ def axis_state_from_dict(axis_name: str, d: Dict, default: AxisState) -> AxisSta
     for i, pd in enumerate(d.get("ctl_presets", [])):
         ctl_presets.append(preset_from_dict(pd, f"Ctl{i+1}"))
 
-    acq_recent = [profile_from_dict(r, default.acq_profile) for r in d.get("acq_recent", [])][:5]
-    ctl_recent = [profile_from_dict(r, default.ctl_profile) for r in d.get("ctl_recent", [])][:5]
+    acq_recent = [profile_from_dict(r, default.acq_profile) for r in d.get("acq_recent", [])][:STAGE_RECENT_HISTORY_LIMIT]
+    ctl_recent = [profile_from_dict(r, default.ctl_profile) for r in d.get("ctl_recent", [])][:STAGE_RECENT_HISTORY_LIMIT]
 
     axis = AxisState(
         axis_name=axis_name,
@@ -526,13 +595,13 @@ class StageSettingsDialog(QtWidgets.QDialog):
 
         lbl_v_move = QtWidgets.QLabel("Velocity (mm/s):", gb)
         spin_v_move = QtWidgets.QDoubleSpinBox(gb)
-        spin_v_move.setRange(0.0, 100.0)
-        spin_v_move.setDecimals(5)
+        spin_v_move.setRange(STAGE_VELOCITY_MIN_MM_S, STAGE_VELOCITY_MAX_MM_S)
+        spin_v_move.setDecimals(STAGE_VELOCITY_DECIMALS)
 
         lbl_acc_move = QtWidgets.QLabel("Acceleration (mm/s²):", gb)
         spin_acc_move = QtWidgets.QDoubleSpinBox(gb)
-        spin_acc_move.setRange(0.0, 1000.0)
-        spin_acc_move.setDecimals(3)
+        spin_acc_move.setRange(STAGE_ACCELERATION_MIN_MM_S2, STAGE_ACCELERATION_MAX_MM_S2)
+        spin_acc_move.setDecimals(STAGE_ACCELERATION_DECIMALS)
 
         grid.addWidget(lbl_v_move, r, 0)
         grid.addWidget(spin_v_move, r, 1)
@@ -549,18 +618,18 @@ class StageSettingsDialog(QtWidgets.QDialog):
 
         lbl_v_step = QtWidgets.QLabel("Velocity (mm/s):", gb)
         spin_v_step = QtWidgets.QDoubleSpinBox(gb)
-        spin_v_step.setRange(0.0, 100.0)
-        spin_v_step.setDecimals(5)
+        spin_v_step.setRange(STAGE_VELOCITY_MIN_MM_S, STAGE_VELOCITY_MAX_MM_S)
+        spin_v_step.setDecimals(STAGE_VELOCITY_DECIMALS)
 
         lbl_acc_step = QtWidgets.QLabel("Acceleration (mm/s²):", gb)
         spin_acc_step = QtWidgets.QDoubleSpinBox(gb)
-        spin_acc_step.setRange(0.0, 1000.0)
-        spin_acc_step.setDecimals(3)
+        spin_acc_step.setRange(STAGE_ACCELERATION_MIN_MM_S2, STAGE_ACCELERATION_MAX_MM_S2)
+        spin_acc_step.setDecimals(STAGE_ACCELERATION_DECIMALS)
 
         lbl_step = QtWidgets.QLabel("Step size (mm):", gb)
         spin_step = QtWidgets.QDoubleSpinBox(gb)
-        spin_step.setRange(0.0, 10.0)
-        spin_step.setDecimals(6)
+        spin_step.setRange(STAGE_STEP_MIN_MM, STAGE_STEP_MAX_MM)
+        spin_step.setDecimals(STAGE_STEP_DECIMALS)
 
         grid.addWidget(lbl_v_step, r, 0)
         grid.addWidget(spin_v_step, r, 1)
@@ -605,7 +674,7 @@ class StageSettingsDialog(QtWidgets.QDialog):
         r += 1
 
         # Recent
-        lbl_recent = QtWidgets.QLabel("Recent (last 5):", gb)
+        lbl_recent = QtWidgets.QLabel(f"Recent (last {STAGE_RECENT_HISTORY_LIMIT}):", gb)
         list_recent = QtWidgets.QListWidget(gb)
         list_recent.setMaximumHeight(80)
         grid.addWidget(lbl_recent, r, 0, 1, 2)
@@ -713,8 +782,8 @@ class StageSettingsDialog(QtWidgets.QDialog):
         if recent_list and profile_to_dict(recent_list[0]) == profile_to_dict(prof):
             return
         recent_list.insert(0, prof)
-        if len(recent_list) > 5:
-            del recent_list[5:]
+        if len(recent_list) > STAGE_RECENT_HISTORY_LIMIT:
+            del recent_list[STAGE_RECENT_HISTORY_LIMIT:]
 
     def _format_recent_text(self, p: StageProfile) -> str:
         return (
@@ -907,43 +976,43 @@ class StagePanel(QtWidgets.QGroupBox):
         self.sample_state = AxisState(
             axis_name="Sample",
             acq_profile=StageProfile(
-                mode="Move",
-                v_move=0.0400,
-                acc_move=1.5,
-                v_step=0.0400,
-                acc_step=1.5,
-                step=0.010,
-                dir="F",
+                mode=STAGE_PROFILE_DEFAULT_MODE,
+                v_move=SAMPLE_ACQ_DEFAULT_MOVE_VELOCITY_MM_S,
+                acc_move=SAMPLE_ACQ_DEFAULT_MOVE_ACCELERATION_MM_S2,
+                v_step=SAMPLE_ACQ_DEFAULT_STEP_VELOCITY_MM_S,
+                acc_step=SAMPLE_ACQ_DEFAULT_STEP_ACCELERATION_MM_S2,
+                step=SAMPLE_ACQ_DEFAULT_STEP_MM,
+                dir=STAGE_PROFILE_DEFAULT_DIRECTION,
             ),
             ctl_profile=StageProfile(
-                mode="Move",
-                v_move=1.0,
-                acc_move=1.5,
-                v_step=1.0,
-                acc_step=1.5,
-                step=0.010,
-                dir="F",
+                mode=STAGE_PROFILE_DEFAULT_MODE,
+                v_move=SAMPLE_CTL_DEFAULT_MOVE_VELOCITY_MM_S,
+                acc_move=SAMPLE_CTL_DEFAULT_MOVE_ACCELERATION_MM_S2,
+                v_step=SAMPLE_CTL_DEFAULT_STEP_VELOCITY_MM_S,
+                acc_step=SAMPLE_CTL_DEFAULT_STEP_ACCELERATION_MM_S2,
+                step=SAMPLE_CTL_DEFAULT_STEP_MM,
+                dir=STAGE_PROFILE_DEFAULT_DIRECTION,
             ),
         )
         self.camera_state = AxisState(
             axis_name="Camera",
             acq_profile=StageProfile(
-                mode="Move",
-                v_move=0.01368,
-                acc_move=1.5,
-                v_step=0.01368,
-                acc_step=1.5,
-                step=0.010,
-                dir="F",
+                mode=STAGE_PROFILE_DEFAULT_MODE,
+                v_move=CAMERA_ACQ_DEFAULT_MOVE_VELOCITY_MM_S,
+                acc_move=CAMERA_ACQ_DEFAULT_MOVE_ACCELERATION_MM_S2,
+                v_step=CAMERA_ACQ_DEFAULT_STEP_VELOCITY_MM_S,
+                acc_step=CAMERA_ACQ_DEFAULT_STEP_ACCELERATION_MM_S2,
+                step=CAMERA_ACQ_DEFAULT_STEP_MM,
+                dir=STAGE_PROFILE_DEFAULT_DIRECTION,
             ),
             ctl_profile=StageProfile(
-                mode="Move",
-                v_move=1.0,
-                acc_move=1.5,
-                v_step=1.0,
-                acc_step=1.5,
-                step=0.020,
-                dir="F",
+                mode=STAGE_PROFILE_DEFAULT_MODE,
+                v_move=CAMERA_CTL_DEFAULT_MOVE_VELOCITY_MM_S,
+                acc_move=CAMERA_CTL_DEFAULT_MOVE_ACCELERATION_MM_S2,
+                v_step=CAMERA_CTL_DEFAULT_STEP_VELOCITY_MM_S,
+                acc_step=CAMERA_CTL_DEFAULT_STEP_ACCELERATION_MM_S2,
+                step=CAMERA_CTL_DEFAULT_STEP_MM,
+                dir=STAGE_PROFILE_DEFAULT_DIRECTION,
             ),
         )
 

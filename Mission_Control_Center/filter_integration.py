@@ -26,6 +26,20 @@ from PySide6.QtCore import QObject, Signal, Slot, QSettings, Qt
 from filter_backends.filter_backend_base import IFilterBackend
 
 
+# Temporary camera-stage motion profile for filter-to-filter focus correction
+# in FilterController.apply_delta_mm(). These are physical units, converted by
+# the existing SDK calls before use; they do not set the filter-wheel speed.
+FOCUS_CORRECTION_VELOCITY_MM_S = 1.5
+FOCUS_CORRECTION_ACCELERATION_MM_S2 = 0.5
+
+# Camera-stage restoration defaults after focus correction (mm/s and mm/s^2).
+# Used only when the existing QSettings keys "stage_v2_mm_s" and
+# "stage_a2_mm_s2", respectively, are absent. Saved values take precedence;
+# these defaults are not a readback of the stage's current motion settings.
+FOCUS_RESTORE_DEFAULT_VELOCITY_MM_S = 0.01368
+FOCUS_RESTORE_DEFAULT_ACCELERATION_MM_S2 = 1.5
+
+
 SETTINGS_PREFIX_FOCUS = "Filters"
 SETTINGS_PREFIX_PANE = "FilterPane"
 
@@ -296,11 +310,12 @@ class FilterController(QObject):
                 TLMC_Unit,
             )
 
-            v_orig = self.settings.value("stage_v2_mm_s", 0.01368, float)
-            a_orig = self.settings.value("stage_a2_mm_s2", 1.5, float)
-
-            V_FAST = 1.5   # mm/s
-            A_FAST = 0.5   # mm/s^2
+            v_orig = self.settings.value(
+                "stage_v2_mm_s", FOCUS_RESTORE_DEFAULT_VELOCITY_MM_S, float
+            )
+            a_orig = self.settings.value(
+                "stage_a2_mm_s2", FOCUS_RESTORE_DEFAULT_ACCELERATION_MM_S2, float
+            )
 
             fast_applied = False
             try:
@@ -310,7 +325,7 @@ class FilterController(QObject):
                             self.camera.convert_from_physical_to_device(
                                 TLMC_ScaleType.TLMC_ScaleType_Velocity,
                                 TLMC_Unit.TLMC_Unit_Millimetres,
-                                V_FAST,
+                                FOCUS_CORRECTION_VELOCITY_MM_S,
                             )
                         )
                     )
@@ -319,7 +334,7 @@ class FilterController(QObject):
                             self.camera.convert_from_physical_to_device(
                                 TLMC_ScaleType.TLMC_ScaleType_Acceleration,
                                 TLMC_Unit.TLMC_Unit_Millimetres,
-                                A_FAST,
+                                FOCUS_CORRECTION_ACCELERATION_MM_S2,
                             )
                         )
                     )

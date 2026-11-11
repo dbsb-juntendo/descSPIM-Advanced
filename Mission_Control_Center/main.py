@@ -18,6 +18,21 @@ from filter_integration import FilterPane
 from galvo_integration import GalvoPane   # ← ガルボパネル
 
 
+# Interval for polling backend.query_status until filter movement completes.
+# This is not a fixed settling delay or a movement timeout.
+FILTER_MOVE_POLL_INTERVAL_MS = 50
+
+# Maximum time to wait for the camera worker thread after quit() during app
+# shutdown. QThread.wait() may return earlier; Disconnect has its own timeout
+# in camera_integration.py.
+CAMERA_SHUTDOWN_WAIT_MS = 5000
+
+# Initial MainWindow size request in Qt device-independent pixels, applied at
+# the app entry point after constructing the panes and before showing it.
+MAIN_WINDOW_INITIAL_WIDTH_PX = 1300
+MAIN_WINDOW_INITIAL_HEIGHT_PX = 1300
+
+
 class MainWindow(QMainWindow):
     def __init__(self, hcam=None):
         super().__init__()
@@ -81,7 +96,7 @@ class MainWindow(QMainWindow):
 
         # フィルタ移動完了待ち用タイマー（busy=Falseまで backend.query_status で監視）
         self._filter_move_timer = QtCore.QTimer(self)
-        self._filter_move_timer.setInterval(50)  # 50 ms 間隔程度
+        self._filter_move_timer.setInterval(FILTER_MOVE_POLL_INTERVAL_MS)
         self._filter_move_timer.timeout.connect(self._check_filter_move_done)
         self._pending_filter_label: Optional[str] = None
         # 前回フィルタ名（差分計算用 / 「from」側）
@@ -293,7 +308,7 @@ class MainWindow(QMainWindow):
                     print(f"[MainWindow] backend pause block error: {e}")
 
                 self.camera_pane.worker_thread.quit()
-                self.camera_pane.worker_thread.wait(5000)
+                self.camera_pane.worker_thread.wait(CAMERA_SHUTDOWN_WAIT_MS)
                 print("[MainWindow] Camera worker thread stopped.")
 
             backend = getattr(self.camera_pane, "backend", None)
@@ -331,6 +346,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     w = MainWindow(hcam=None)
     app.aboutToQuit.connect(lambda: w.on_shutdown())
-    w.resize(1300, 1300)
+    w.resize(MAIN_WINDOW_INITIAL_WIDTH_PX, MAIN_WINDOW_INITIAL_HEIGHT_PX)
     w.show()
     sys.exit(app.exec())
