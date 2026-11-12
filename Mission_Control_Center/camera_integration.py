@@ -519,8 +519,9 @@ class CaptureWorker(QObject):
             return
         
         if not self._recording:
-            try:    # 保存用ビット深度（8 or 16）は UI のポリシーで決める
-                bits = 8  # 例：とりあえず 8bit でスナップ
+            try:
+                # Output format already established by backend.query_params().
+                bits = self._bits
                 snapshot = self.backend.capture_snapshot(bits=bits)
                 self.sig_snapshot_ready.emit(snapshot)
                 return
@@ -532,7 +533,8 @@ class CaptureWorker(QObject):
                 return
 
         else:
-            bits = 8 #self._bits  # TODOカメラのbitdepthに合わせて変えるようにする
+            # Match the output format used by the recording buffer.
+            bits = self._bits
             snapshot = self.backend.capture_snapshot(bits=bits)
             self.sig_snapshot_ready.emit(snapshot)
             return snapshot
@@ -1386,6 +1388,12 @@ class CameraPane(QWidget):
             if w is self.spin_autostop:
                 # Auto-stop のスピンボックスはチェック状態も見る
                 w.setEnabled(enabled and self.chk_autostop.isChecked())
+            elif w is self.ctrl_bit:
+                w.setEnabled(
+                    enabled
+                    and self.backend is not None
+                    and self.backend.can_select_bit_depth()
+                )
             else:
                 w.setEnabled(enabled)
 
