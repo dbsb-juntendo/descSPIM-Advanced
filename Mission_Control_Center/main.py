@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
             container.setLayout(main_layout)
             self.setCentralWidget(container)
 
-        # wiring: stage 接続状態 → FilterPane 側へ camera_device を伝搬
+        # wiring: stage 接続状態 → FilterPane 側へ camera stage backend を伝搬
         try:
             self.stage_pane.sig_connected.connect(self._on_stage_connected)
         except Exception:
@@ -183,9 +183,8 @@ class MainWindow(QMainWindow):
     @QtCore.Slot(bool)
     def _on_stage_connected(self, connected: bool):
         try:
-            cam_device = self.stage_pane.get_camera_device()
-            if cam_device is not None:
-                self.filter_pane.set_camera_device(cam_device)
+            camera_backend = self.stage_pane.get_camera_backend()
+            self.filter_pane.set_camera_backend(camera_backend)
         except Exception:
             pass
 
@@ -207,7 +206,7 @@ class MainWindow(QMainWindow):
         # カメラステージ軸が未設定なら何もしない
         try:
             focus_ctl = getattr(self.filter_pane, "_focus_controller", None)
-            if focus_ctl is None or getattr(focus_ctl, "camera", None) is None:
+            if focus_ctl is None or getattr(focus_ctl, "camera_backend", None) is None:
                 return
         except Exception:
             return

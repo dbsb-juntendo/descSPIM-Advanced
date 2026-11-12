@@ -15,6 +15,10 @@ from PySide6.QtCore import Slot, QSettings
 
 from .internal import xa_shared
 
+# Infinite-wait argument for the legacy two-argument relative-move fallback.
+# Keep its original unsigned value; normal calls use the SDK's wait enum.
+FOCUS_LEGACY_INFINITE_WAIT = 0xFFFFFFFF
+
 # ---- for step DDA ---------------------------------------------
 from decimal import Decimal, getcontext
 getcontext().prec = 50  # 十分大きく
@@ -105,7 +109,7 @@ class ThorlabsKDC101Backend(IStageBackend):
         #self._ret_thread: QtCore.QThread | None = None
         self._returning = False
 
-        # ---- Motion worker / thread 設定（device を触るのはここ経由）----
+        # ---- 通常の移動要求用 worker / thread（focus API は同期呼び出し）----
         self._motion_thread: QtCore.QThread | None = QtCore.QThread(self)
         self._motion_worker = _MotionWorker(self)
         self._motion_worker.moveToThread(self._motion_thread)
@@ -122,6 +126,110 @@ class ThorlabsKDC101Backend(IStageBackend):
         self.req_return.connect(self._motion_worker.do_return, QtCore.Qt.QueuedConnection)
 
         self._motion_thread.start()
+
+    # ---- Synchronous focus correction (formerly in FilterController) ----
+    # Preserve the existing SDK call/fallback order. These operations do not
+    # use the queued Move/Step commands or modify their cached/saved profiles.
+
+    def supports_focus_correction(self) -> bool:
+        return True
+
+    def _require_focus_device(self):
+        if not self._connected or self.device is None:
+            raise RuntimeError("camera stage not connected")
+        return self.device
+
+    def get_focus_position_counts(self) -> int:
+        device = self._require_focus_device()
+        try:
+            return int(device.get_position_counter(xa_shared.TLMC_Wait.TLMC_InfiniteWait))
+        except Exception:
+            try:
+                return int(device.get_position_counter())
+            except Exception as e:
+                raise RuntimeError(f"_get_current_count: unable to read counter: {e}")
+
+    def focus_counts_to_mm(self, counts: int) -> float | None:
+        device = self._require_focus_device()
+        try:
+            phys = device.convert_from_device_units_to_physical(
+                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance, int(counts)
+            )
+            return float(getattr(phys, "converted_value", phys))
+        except Exception:
+            try:
+                phys = device.convert_from_device_units_to_physical(int(counts))
+                return float(getattr(phys, "converted_value", phys))
+            except Exception:
+                return None
+
+    def focus_mm_to_counts(self, mm: float) -> int:
+        device = self._require_focus_device()
+        try:
+            return int(round(device.convert_from_physical_to_device(
+                xa_shared.TLMC_ScaleType.TLMC_ScaleType_Distance,
+                xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+                float(mm),
+            )))
+        except Exception:
+            try:
+                return int(round(device.convert_from_physical_to_device(float(mm))))
+            except Exception as e:
+                raise RuntimeError(f"_mm_to_count: {e}")
+
+    def set_focus_motion_params(self, v_mm_s: float, a_mm_s2: float) -> None:
+        device = self._require_focus_device()
+        v_dev = int(round(device.convert_from_physical_to_device(
+            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Velocity,
+            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+            v_mm_s,
+        )))
+        a_dev = int(round(device.convert_from_physical_to_device(
+            xa_shared.TLMC_ScaleType.TLMC_ScaleType_Acceleration,
+            xa_shared.TLMC_Unit.TLMC_Unit_Millimetres,
+            a_mm_s2,
+        )))
+        device.set_velocity_params(0, a_dev, v_dev)
+
+    def move_focus_relative_counts(self, delta_counts: int) -> None:
+        device = self._require_focus_device()
+        moved = False
+        errs: list[str] = []
+        try:
+            try:
+                device.move_relative(
+                    xa_shared.TLMC_MoveModes.MoveMode_RelativeByProgrammed,
+                    int(delta_counts),
+                    xa_shared.TLMC_Wait.TLMC_InfiniteWait,
+                )
+                moved = True
+            except Exception as e1:
+                errs.append(f"RelByProg: {e1}")
+                try:
+                    device.move_relative(
+                        xa_shared.TLMC_MoveModes.MoveMode_Relative,
+                        int(delta_counts),
+                        xa_shared.TLMC_Wait.TLMC_InfiniteWait,
+                    )
+                    moved = True
+                except Exception as e2:
+                    errs.append(f"Rel: {e2}")
+        except Exception as e:
+            errs.append(f"enum-fallback: {e}")
+
+        if not moved:
+            try:
+                try:
+                    device.move_relative(int(delta_counts))
+                    moved = True
+                except Exception:
+                    device.move_relative(int(delta_counts), FOCUS_LEGACY_INFINITE_WAIT)
+                    moved = True
+            except Exception as e:
+                errs.append(f"simple-fallbacks: {e}")
+
+        if not moved:
+            raise RuntimeError("move_relative failed; tried: " + " | ".join(errs))
 
     # ---- settings ヘルパ ---------------------------------------------
 
@@ -564,7 +672,7 @@ class _MotionWorker(QtCore.QObject):
     """
     実際に KDC101 device を叩くスレッド用 worker。
     ThorlabsKDC101Backend からの req_* シグナルだけを入口にして、
-    ここからのみ device.* を呼ぶ。
+    通常の移動要求を実行する。focus API は backend 本体で同期実行する。
     """
 
     def __init__(self, backend: ThorlabsKDC101Backend):

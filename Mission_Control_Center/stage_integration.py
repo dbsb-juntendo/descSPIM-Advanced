@@ -2504,14 +2504,15 @@ class StagePanel(QtWidgets.QGroupBox):
                 pass
 
     # ---------------- Filter 用 helper ----------------
-    def get_camera_device(self):
+    def get_camera_backend(self) -> Optional[IStageBackend]:
+        """Return the connected Camera-axis backend for filter focus control.
+
+        The SDK device stays inside the backend. Check the Camera axis itself:
+        the panel can be connected through the Sample axis alone.
         """
-        FilterController に渡すための「Camera 軸の stage device」を返す。
-        1 軸 backend では camera 側 backend の device をそのまま返す。
-        """
-        if self.backend_camera is None:
+        if not self._connected_camera:
             return None
-        return getattr(self.backend_camera, "device", None)
+        return self.backend_camera
 
     def get_camera_acquisition_motion_params(self) -> Tuple[float, float]:
         """Snapshot the selected Camera Acquisition velocity/acceleration.
