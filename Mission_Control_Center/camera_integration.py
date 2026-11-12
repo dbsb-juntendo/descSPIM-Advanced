@@ -36,6 +36,105 @@ import pathlib
 
 import json
 
+# Recording image-buffer limit in GiB (1 GiB = 1024**3 bytes).
+# Shared by MOVIE and STEP recording; counts stored image-array bytes only.
+# Python objects, metadata, SDK buffers, display images, and memory used by the
+# operating system or other applications are not included. Adjust this value
+# for the acquisition PC's RAM capacity, leaving room for those other uses.
+# The limit is checked after each frame is stored. The current frame is kept,
+# and recording auto-stops only when the buffered image bytes exceed the limit.
+RECORDING_RAM_LIMIT_GIB = 70
+
+# Fixed delay after a stage STEP completion signal, before the next color
+# sequence starts. This is separate from the per-color switch delay below.
+STEP_SETTLE_DELAY_MS = 100
+
+# Per-color delay after applying filter/laser settings and before capture.
+# The default is used only when "switch_delay_ms" is absent from the program;
+# values entered in the STEP program dialog retain priority. The min/max limits
+# apply to that dialog's input field, not to runtime program validation.
+COLOR_SWITCH_DELAY_DEFAULT_MS = 50
+COLOR_SWITCH_DELAY_MIN_MS = 0
+COLOR_SWITCH_DELAY_MAX_MS = 5000
+
+# Maximum time to wait for the camera worker thread after quit() on Disconnect.
+# QThread.wait() may return earlier; this is not a fixed acquisition delay.
+CAMERA_DISCONNECT_WAIT_MS = 3000
+
+# Initial GUI limits and arrow-key/button increments for Gain and Exposure.
+# These are UI construction settings, not camera capabilities. On connection,
+# backend.populate_controls() runs first, then saved QSettings values are
+# applied within the resulting widget ranges. Gain units are backend-specific.
+CAMERA_GAIN_MIN = 0
+CAMERA_GAIN_MAX = 10000
+CAMERA_GAIN_STEP = 10
+
+# Exposure values are in milliseconds. Keep the existing zero decimal places
+# and Qt rounding behavior when applying the range and displaying values.
+CAMERA_EXPOSURE_DECIMALS = 0
+CAMERA_EXPOSURE_MIN_MS = 0.001
+CAMERA_EXPOSURE_MAX_MS = 10_000.000
+CAMERA_EXPOSURE_STEP_MS = 0.1
+
+# Auto-stop input range and initial GUI value: frames for MOVIE recording,
+# completed steps for STEP recording. These do not enable Auto-stop or change
+# the worker's inactive count; the existing GUI signal handlers apply the count.
+CAMERA_AUTOSTOP_MIN_COUNT = 1
+CAMERA_AUTOSTOP_MAX_COUNT = 10_000_000
+CAMERA_AUTOSTOP_DEFAULT_COUNT = 1000
+
+# Review playback rate used to initialize the timer and for fixed-rate replay
+# when matching frame timestamps are unavailable. The existing conversion
+# int(1000 / fps) gives a 33 ms timer interval at 30 fps. Timestamp-based replay
+# retains priority; this setting does not control the acquisition frame rate.
+REVIEW_DEFAULT_FPS = 30
+
+# Minimum review interval in milliseconds after the existing round()/int()
+# conversion of the difference between adjacent frame timestamps.
+REVIEW_MIN_INTERVAL_MS = 1
+
+# Update TIFF-save progress after this many written frames and always after
+# the final frame. The existing explicit UI event processing occurs at those
+# same checkpoints, after the progress value and status text are updated.
+TIFF_SAVE_PROGRESS_INTERVAL_FRAMES = 50
+
+# QProgressDialog minimumDuration setting for buffered TIFF saving (ms).
+# Zero retains the existing no-delay setting for showing progress.
+TIFF_SAVE_PROGRESS_MINIMUM_DURATION_MS = 0
+
+# GUI-side ROI snapping before backend.set_roi(), in image pixels. X/Y share
+# the position increment; width/height share the size increment and minimum.
+# Keep the existing floor-division rounding, followed by the size minimum.
+# These are the current GUI rules, not capabilities queried from the camera.
+ROI_POSITION_STEP_PX = 2
+ROI_SIZE_STEP_PX = 4
+ROI_MIN_SIZE_PX = 16
+
+# Initial instance bounds for wheel-driven image-view zoom, as dimensionless
+# transform scales. The first-image fit retains its separate scaling logic.
+VIEW_ZOOM_MIN_SCALE = 0.1
+VIEW_ZOOM_MAX_SCALE = 10.0
+
+# Wheel zoom uses factor ** (input_delta / units_per_step). The existing
+# angleDelta() priority and pixelDelta() fallback share this same divisor.
+VIEW_ZOOM_FACTOR_PER_STEP = 1.25
+VIEW_ZOOM_INPUT_UNITS_PER_STEP = 120.0
+
+# Absolute scale-difference threshold for accepting an event without zooming.
+# Keep the existing strict less-than comparison after applying the bounds.
+VIEW_ZOOM_SCALE_CHANGE_EPSILON = 1e-12
+
+# Initial CameraPane size request, in Qt device-independent pixels. When the
+# pane is embedded in MainWindow, its containing layout determines its size.
+CAMERA_PANE_INITIAL_WIDTH_PX = 1200
+CAMERA_PANE_INITIAL_HEIGHT_PX = 1000
+
+# Image-view minimum size and fixed frame-count label width, in the same Qt
+# units. These are widget dimensions, separate from camera image resolution.
+IMAGE_VIEW_MIN_WIDTH_PX = 320
+IMAGE_VIEW_MIN_HEIGHT_PX = 240
+FRAME_COUNT_LABEL_WIDTH_PX = 120
+
 BACKEND_MODULE_DIR = pathlib.Path(__file__).parent / "camera_backends"
 
 def scan_camera_backends():
@@ -113,8 +212,8 @@ class RoiView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.NoAnchor)
 
         # 最小/最大 スケールを任意で制限する（必要なら調整）
-        self._min_scale = 0.1
-        self._max_scale = 10.0
+        self._min_scale = VIEW_ZOOM_MIN_SCALE
+        self._max_scale = VIEW_ZOOM_MAX_SCALE
 
     def set_image(self, qimg: QImage):
         pix = QPixmap.fromImage(qimg)
@@ -248,8 +347,8 @@ class RoiView(QGraphicsView):
             event.ignore()
             return
 
-        steps = angle / 120.0  # 1 step = 120 (typical)
-        factor = 1.25 ** steps
+        steps = angle / VIEW_ZOOM_INPUT_UNITS_PER_STEP
+        factor = VIEW_ZOOM_FACTOR_PER_STEP ** steps
 
         # マウス位置のシーン座標（ズーム前）
         old_pos = self.mapToScene(event.position().toPoint())
@@ -267,7 +366,7 @@ class RoiView(QGraphicsView):
             requested_new_scale = self._max_scale
 
         # もしスケールが変わらない（上限/下限でクランプされ、現在と同じ）なら
-        if abs(requested_new_scale - current_scale) < 1e-12:
+        if abs(requested_new_scale - current_scale) < VIEW_ZOOM_SCALE_CHANGE_EPSILON:
             # イベントを消化してスクロールバーに渡さない
             event.accept()
             return
@@ -338,7 +437,7 @@ class CaptureWorker(QObject):
         self._recording = False
         self._ram_frames = deque()
         self._ram_bytes = 0
-        self._ram_limit = 70 * (1024**3)
+        self._ram_limit = RECORDING_RAM_LIMIT_GIB * (1024**3)
         self._dtype = np.uint8 if self._bits == 8 else np.uint16
 
         self._auto_stop_enabled = False
@@ -420,8 +519,9 @@ class CaptureWorker(QObject):
             return
         
         if not self._recording:
-            try:    # 保存用ビット深度（8 or 16）は UI のポリシーで決める
-                bits = 8  # 例：とりあえず 8bit でスナップ
+            try:
+                # Output format already established by backend.query_params().
+                bits = self._bits
                 snapshot = self.backend.capture_snapshot(bits=bits)
                 self.sig_snapshot_ready.emit(snapshot)
                 return
@@ -433,7 +533,8 @@ class CaptureWorker(QObject):
                 return
 
         else:
-            bits = 8 #self._bits  # TODOカメラのbitdepthに合わせて変えるようにする
+            # Match the output format used by the recording buffer.
+            bits = self._bits
             snapshot = self.backend.capture_snapshot(bits=bits)
             self.sig_snapshot_ready.emit(snapshot)
             return snapshot
@@ -541,7 +642,7 @@ class CaptureWorker(QObject):
 
         QTimer.singleShot(0, self._run_next_color_in_step)
 
-    # ステップ完了のシグナルを受け取ったときの処理。ステップ録画モードでなければ無視。完了後 100ms 待ってから撮影を行う。
+    # ステップ完了のシグナルを受け取ったときの処理。ステップ録画モードでなければ無視。完了後、設定された固定待機時間を置いてから色ごとの処理を始める。
     @Slot()
     def on_stage_step_done(self):
         if not self._recording or not self._step_waiting:
@@ -550,7 +651,7 @@ class CaptureWorker(QObject):
         self._step_waiting = False
         self._color_index = 0
 
-        QTimer.singleShot(100, self._run_next_color_in_step)
+        QTimer.singleShot(STEP_SETTLE_DELAY_MS, self._run_next_color_in_step)
 
     def _run_next_color_in_step(self):
         if not self._recording:
@@ -574,7 +675,7 @@ class CaptureWorker(QObject):
 
         try:
             self._apply_filter_and_laser(cfg)
-            delay_ms = int(cfg.get("switch_delay_ms", 50))
+            delay_ms = int(cfg.get("switch_delay_ms", COLOR_SWITCH_DELAY_DEFAULT_MS))
             QTimer.singleShot(delay_ms, self._capture_current_color)
         except Exception as e:
             print(f"[CaptureWorker] _run_next_color_in_step error: {e}")
@@ -897,8 +998,8 @@ class StepColorProgramDialog(QDialog):
             name_edit.setText(init.get("name", f"Color{i+1}"))
 
             spin_delay = QSpinBox(self)
-            spin_delay.setRange(0, 5000)
-            spin_delay.setValue(int(init.get("switch_delay_ms", 50)))
+            spin_delay.setRange(COLOR_SWITCH_DELAY_MIN_MS, COLOR_SWITCH_DELAY_MAX_MS)
+            spin_delay.setValue(int(init.get("switch_delay_ms", COLOR_SWITCH_DELAY_DEFAULT_MS)))
 
             grid.addWidget(name_edit, i + 1, 0)
             grid.addWidget(cmb_laser, i + 1, 1)
@@ -1021,7 +1122,7 @@ class CameraPane(QWidget):
         # --------------------------------------------------
         # 2) ウィンドウサイズ制御
         # --------------------------------------------------
-        self.resize(1200, 1000)
+        self.resize(CAMERA_PANE_INITIAL_WIDTH_PX, CAMERA_PANE_INITIAL_HEIGHT_PX)
         #self.setMinimumSize(600, 600)
         #screen = QGuiApplication.primaryScreen().geometry()
         #self.setMaximumSize(screen.width(), screen.height())
@@ -1052,7 +1153,7 @@ class CameraPane(QWidget):
 
         # 画像ビュー
         self.label = RoiView(self)
-        self.label.setMinimumSize(320, 240)
+        self.label.setMinimumSize(IMAGE_VIEW_MIN_WIDTH_PX, IMAGE_VIEW_MIN_HEIGHT_PX)
         self.label.enable_edit(False)
         self.label.sig_roi_changed.connect(self.on_roi_changed)
 
@@ -1064,11 +1165,11 @@ class CameraPane(QWidget):
         self.btn_play.setEnabled(False)
 
         self.lbl_time = QLabel("0 / 0 frames")
-        self.lbl_time.setFixedWidth(120)
+        self.lbl_time.setFixedWidth(FRAME_COUNT_LABEL_WIDTH_PX)
         self.lbl_time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.play_timer = QTimer(self)
-        self.play_timer.setInterval(int(1000 / 30))
+        self.play_timer.setInterval(int(1000 / REVIEW_DEFAULT_FPS))
         self.play_timer.timeout.connect(self._on_play_tick)
 
         ctl_play = QWidget()
@@ -1121,13 +1222,13 @@ class CameraPane(QWidget):
 
         # ---- Gain / Exposure ----
         self.ctrl_gain = QSpinBox()
-        self.ctrl_gain.setRange(0, 10000)
-        self.ctrl_gain.setSingleStep(10)
+        self.ctrl_gain.setRange(CAMERA_GAIN_MIN, CAMERA_GAIN_MAX)
+        self.ctrl_gain.setSingleStep(CAMERA_GAIN_STEP)
 
         self.ctrl_expo = QDoubleSpinBox()
-        self.ctrl_expo.setDecimals(0)
-        self.ctrl_expo.setRange(0.001, 10_000.000)
-        self.ctrl_expo.setSingleStep(0.1)
+        self.ctrl_expo.setDecimals(CAMERA_EXPOSURE_DECIMALS)
+        self.ctrl_expo.setRange(CAMERA_EXPOSURE_MIN_MS, CAMERA_EXPOSURE_MAX_MS)
+        self.ctrl_expo.setSingleStep(CAMERA_EXPOSURE_STEP_MS)
         self.ctrl_expo.setSuffix(" ms")
 
         # Enter キーで apply_gain_expo を実行
@@ -1177,8 +1278,8 @@ class CameraPane(QWidget):
 
         self.chk_autostop = QCheckBox("Auto-stop at")
         self.spin_autostop = QSpinBox()
-        self.spin_autostop.setRange(1, 10_000_000)
-        self.spin_autostop.setValue(1000)
+        self.spin_autostop.setRange(CAMERA_AUTOSTOP_MIN_COUNT, CAMERA_AUTOSTOP_MAX_COUNT)
+        self.spin_autostop.setValue(CAMERA_AUTOSTOP_DEFAULT_COUNT)
         self.spin_autostop.setEnabled(False)
 
         lbl_frames = QLabel("frames")
@@ -1287,6 +1388,12 @@ class CameraPane(QWidget):
             if w is self.spin_autostop:
                 # Auto-stop のスピンボックスはチェック状態も見る
                 w.setEnabled(enabled and self.chk_autostop.isChecked())
+            elif w is self.ctrl_bit:
+                w.setEnabled(
+                    enabled
+                    and self.backend is not None
+                    and self.backend.can_select_bit_depth()
+                )
             else:
                 w.setEnabled(enabled)
 
@@ -1427,7 +1534,7 @@ class CameraPane(QWidget):
             if th is not None:
                 try:
                     th.quit()
-                    th.wait(3000)
+                    th.wait(CAMERA_DISCONNECT_WAIT_MS)
                 except Exception:
                     pass
 
@@ -2093,7 +2200,7 @@ class CameraPane(QWidget):
         # 進捗ダイアログ（モーダル）
         dlg = QProgressDialog("Saving...", None, 0, n, self)
         dlg.setWindowModality(Qt.ApplicationModal)
-        dlg.setMinimumDuration(0)
+        dlg.setMinimumDuration(TIFF_SAVE_PROGRESS_MINIMUM_DURATION_MS)
         dlg.setAutoClose(True)
         dlg.setValue(0)
 
@@ -2102,7 +2209,7 @@ class CameraPane(QWidget):
             with tifffile.TiffWriter(path, bigtiff=True) as tw:
                 for i, frame in enumerate(self.worker._ram_frames):
                     tw.write(frame, contiguous=True, photometric='minisblack')
-                    if (i+1) % 50 == 0 or (i+1) == n:
+                    if (i+1) % TIFF_SAVE_PROGRESS_INTERVAL_FRAMES == 0 or (i+1) == n:
                         dlg.setValue(i+1)
                         self._set_status(f"Saving {i+1}/{n} ({100*(i+1)/n:.1f}%)")
                         QCoreApplication.processEvents()  # ここでUIを再描画
@@ -2250,7 +2357,7 @@ class CameraPane(QWidget):
 
     @Slot()
     def _on_play_tick(self):
-        # 固定fps（デフォルト30fps）
+        # 固定fps（REVIEW_DEFAULT_FPSで指定）
         if self._ram_view is not None and len(self._ram_view) > 0:
             n = len(self._ram_view)
         elif self._stack is not None:
@@ -2292,7 +2399,7 @@ class CameraPane(QWidget):
             self._on_play_tick()
             return
 
-        dt_ms = max(1, int(round(self._times_ms[i+1] - self._times_ms[i])))
+        dt_ms = max(REVIEW_MIN_INTERVAL_MS, int(round(self._times_ms[i+1] - self._times_ms[i])))
         self.play_timer.setInterval(dt_ms)
 
         self.slider.blockSignals(True)
@@ -2325,7 +2432,7 @@ class CameraPane(QWidget):
             self.play_timer.timeout.connect(self._on_play_tick_variable)
         else:
             self.play_timer.timeout.connect(self._on_play_tick)
-            self.play_timer.setInterval(int(1000/30))
+            self.play_timer.setInterval(int(1000 / REVIEW_DEFAULT_FPS))
 
         self.play_timer.start()
         self.btn_play.setText("Pause")
@@ -2373,11 +2480,11 @@ class CameraPane(QWidget):
         self._render_current()
 
     def _snap_roi(self, x, y, w, h):
-        # 仕様: 位置2px単位, サイズ4px単位, 最小16x16
-        x = (x // 2) * 2
-        y = (y // 2) * 2
-        w = max(16, (w // 4) * 4)
-        h = max(16, (h // 4) * 4)
+        # GUI側のROI定数に従って丸め、幅と高さに最小サイズを適用する。
+        x = (x // ROI_POSITION_STEP_PX) * ROI_POSITION_STEP_PX
+        y = (y // ROI_POSITION_STEP_PX) * ROI_POSITION_STEP_PX
+        w = max(ROI_MIN_SIZE_PX, (w // ROI_SIZE_STEP_PX) * ROI_SIZE_STEP_PX)
+        h = max(ROI_MIN_SIZE_PX, (h // ROI_SIZE_STEP_PX) * ROI_SIZE_STEP_PX)
         return x, y, w, h
 
     @Slot()

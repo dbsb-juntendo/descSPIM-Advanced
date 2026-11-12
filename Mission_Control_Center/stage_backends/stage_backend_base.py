@@ -65,6 +65,44 @@ class IStageBackend(QObject):
         self.product_code: str = ""
         self.axis_name: str = "Single"
 
+    # ---- Optional, synchronous focus-correction API ----
+    # Counts are integer position units defined by each backend. Keeping them
+    # unchanged preserves existing filter-focus settings; they are not portable
+    # between different stage types or calibrations. SDK objects/enums stay in
+    # the concrete backend. These calls must not save or alter GUI profiles.
+
+    def supports_focus_correction(self) -> bool:
+        """True only when all focus operations below are implemented."""
+        return False
+
+    def get_focus_position_counts(self) -> int:
+        """Read the connected stage's current position in backend counts."""
+        raise NotImplementedError("stage backend does not support focus correction")
+
+    def focus_counts_to_mm(self, counts: int) -> Optional[float]:
+        """Convert position counts to mm; None means conversion unavailable."""
+        raise NotImplementedError("stage backend does not support focus correction")
+
+    def focus_mm_to_counts(self, mm: float) -> int:
+        """Convert mm to integer position counts using backend rounding."""
+        raise NotImplementedError("stage backend does not support focus correction")
+
+    def set_focus_motion_params(self, v_mm_s: float, a_mm_s2: float) -> None:
+        """Set device velocity/acceleration only; raise on failure.
+
+        Do not change saved settings, cached Move/Step profiles, or direction.
+        The caller supplies both temporary and restoration values.
+        """
+        raise NotImplementedError("stage backend does not support focus correction")
+
+    def move_focus_relative_counts(self, delta_counts: int) -> None:
+        """Move by signed counts and wait for completion; raise on failure.
+
+        Must not merely queue a move and return: the caller restores motion
+        settings immediately after this call and its status reporting finish.
+        """
+        raise NotImplementedError("stage backend does not support focus correction")
+
     # ---- StagePanel が呼ぶ最小 API セット ----
 
     # 設定・接続まわり

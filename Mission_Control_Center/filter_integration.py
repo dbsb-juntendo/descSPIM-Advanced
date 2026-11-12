@@ -24,7 +24,14 @@ from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import QObject, Signal, Slot, QSettings, Qt
 
 from filter_backends.filter_backend_base import IFilterBackend
+from stage_backends.stage_backend_base import IStageBackend
 
+
+# Temporary camera-stage motion profile for filter-to-filter focus correction
+# in FilterController.apply_delta_mm(). These are physical units, converted by
+# the stage backend before use; they do not set the filter-wheel speed.
+FOCUS_CORRECTION_VELOCITY_MM_S = 1.5
+FOCUS_CORRECTION_ACCELERATION_MM_S2 = 0.5
 
 SETTINGS_PREFIX_FOCUS = "Filters"
 SETTINGS_PREFIX_PANE = "FilterPane"
@@ -38,9 +45,10 @@ class FilterController(QObject):
     sig_status = Signal(str)
     sig_error = Signal(str)
 
-    def __init__(self, camera_device=None, profile: str = "default", parent=None):
+    def __init__(self, camera_backend: Optional[IStageBackend] = None,
+                 profile: str = "default", parent=None):
         super().__init__(parent)
-        self.camera = camera_device     # camera stage
+        self.camera_backend = camera_backend
         self.profile = profile
         self.settings = QSettings("LabSuite", "StageControl")
         self.wavelengths: List[str] = []
@@ -75,61 +83,32 @@ class FilterController(QObject):
             self.sig_error.emit(f"load_settings: {e}")
 
     # ----- configuration -----
-    def set_camera_device(self, device):
-        self.camera = device
+    def set_camera_backend(self, backend: Optional[IStageBackend]):
+        self.camera_backend = backend
+
+    def _require_focus_stage(self) -> IStageBackend:
+        if self.camera_backend is None:
+            raise RuntimeError("camera stage not set")
+        if not self.camera_backend.supports_focus_correction():
+            raise RuntimeError("camera stage backend does not support focus correction")
+        return self.camera_backend
 
     def set_wavelengths(self, wavelengths: List[str]):
         # ここでは単にキーとして使うだけなので、実際は「filter 名」
         self.wavelengths = wavelengths
 
-    # ----- helpers: counter <-> mm -----
+    # ----- helpers: backend counts <-> mm -----
     def _get_current_count(self) -> int:
-        if self.camera is None:
-            raise RuntimeError("camera stage not set")
-        try:
-            from xa_sdk.shared.tlmc_type_structures import TLMC_Wait  # type: ignore
-            return int(self.camera.get_position_counter(TLMC_Wait.TLMC_InfiniteWait))
-        except Exception:
-            try:
-                return int(self.camera.get_position_counter())
-            except Exception as e:
-                raise RuntimeError(f"_get_current_count: unable to read counter: {e}")
+        return int(self._require_focus_stage().get_focus_position_counts())
 
     def _count_to_mm(self, count: int) -> Optional[float]:
-        if self.camera is None:
-            return None
         try:
-            from xa_sdk.shared.tlmc_type_structures import TLMC_ScaleType  # type: ignore
-            phys = self.camera.convert_from_device_units_to_physical(
-                TLMC_ScaleType.TLMC_ScaleType_Distance, int(count)
-            )
-            return float(getattr(phys, "converted_value", phys))
+            return self._require_focus_stage().focus_counts_to_mm(int(count))
         except Exception:
-            try:
-                phys = self.camera.convert_from_device_units_to_physical(int(count))
-                return float(getattr(phys, "converted_value", phys))
-            except Exception:
-                return None
+            return None
 
     def _mm_to_count(self, mm: float) -> int:
-        if self.camera is None:
-            raise RuntimeError("camera stage not set")
-        try:
-            from xa_sdk.shared.tlmc_type_structures import TLMC_ScaleType, TLMC_Unit  # type: ignore
-            return int(
-                round(
-                    self.camera.convert_from_physical_to_device(
-                        TLMC_ScaleType.TLMC_ScaleType_Distance,
-                        TLMC_Unit.TLMC_Unit_Millimetres,
-                        float(mm),
-                    )
-                )
-            )
-        except Exception:
-            try:
-                return int(round(self.camera.convert_from_physical_to_device(float(mm))))
-            except Exception as e:
-                raise RuntimeError(f"_mm_to_count: {e}")
+        return int(self._require_focus_stage().focus_mm_to_counts(float(mm)))
 
     # ----- register / apply (外部は mm 単位 API) -----
     @Slot(str)
@@ -140,8 +119,7 @@ class FilterController(QObject):
         count_override: Optional[int] = None,
     ):
         try:
-            if self.camera is None:
-                raise RuntimeError("camera stage not set")
+            self._require_focus_stage()
             if not wavelength:
                 raise ValueError("wavelength required")
 
@@ -173,8 +151,7 @@ class FilterController(QObject):
         main.py からの同期制御では使用しない。
         """
         try:
-            if self.camera is None:
-                raise RuntimeError("camera stage not set")
+            self._require_focus_stage()
             if wavelength not in self._positions_counts:
                 raise RuntimeError(f"no registered position for {wavelength}")
 
@@ -199,46 +176,7 @@ class FilterController(QObject):
         current_count: Optional[int] = None,
         target_count: Optional[int] = None,
     ):
-        moved = False
-        errs: List[str] = []
-
-        try:
-            from xa_sdk.shared.tlmc_type_structures import TLMC_MoveModes, TLMC_Wait  # type: ignore
-
-            try:
-                self.camera.move_relative(
-                    TLMC_MoveModes.MoveMode_RelativeByProgrammed,
-                    int(delta_counts),
-                    TLMC_Wait.TLMC_InfiniteWait,
-                )
-                moved = True
-            except Exception as e1:
-                errs.append(f"RelByProg: {e1}")
-                try:
-                    self.camera.move_relative(
-                        TLMC_MoveModes.MoveMode_Relative,
-                        int(delta_counts),
-                        TLMC_Wait.TLMC_InfiniteWait,
-                    )
-                    moved = True
-                except Exception as e2:
-                    errs.append(f"Rel: {e2}")
-        except Exception as e:
-            errs.append(f"enum-fallback: {e}")
-
-        if not moved:
-            try:
-                try:
-                    self.camera.move_relative(int(delta_counts))
-                    moved = True
-                except Exception:
-                    self.camera.move_relative(int(delta_counts), 0xFFFFFFFF)
-                    moved = True
-            except Exception as e:
-                errs.append(f"simple-fallbacks: {e}")
-
-        if not moved:
-            raise RuntimeError("move_relative failed; tried: " + " | ".join(errs))
+        self._require_focus_stage().move_focus_relative_counts(int(delta_counts))
 
         try:
             if current_count is None:
@@ -262,15 +200,21 @@ class FilterController(QObject):
             )
 
     @Slot(str, str)
-    def apply_delta_mm(self, from_wl: str, to_wl: str):
+    @Slot(str, str, object)
+    def apply_delta_mm(
+        self,
+        from_wl: str,
+        to_wl: str,
+        restore_motion_params: Optional[Tuple[float, float]] = None,
+    ):
         """
         「from フィルタ」と「to フィルタ」の登録位置の差分だけを動かす。
         - どちらか一方でも未登録なら、ステージは動かさずエラーだけ出す。
+        - restore_motion_params は StagePanel の録画用 Acquisition 設定
+          (速度 mm/s, 加速度 mm/s^2)。補正前に退避し、終了時に復元する。
         """
         try:
-            if self.camera is None:
-                self.sig_error.emit("camera stage not set")
-                return
+            stage = self._require_focus_stage()
 
             if from_wl not in self._positions_counts or to_wl not in self._positions_counts:
                 self.sig_error.emit(
@@ -288,42 +232,23 @@ class FilterController(QObject):
                 )
                 return
 
+            # Snapshot the GUI-confirmed Acquisition settings supplied by
+            # StagePanel, independently of manual operation or legacy defaults.
+            # Without a restore target, do not change the device's settings.
+            if restore_motion_params is None:
+                raise RuntimeError("camera Acquisition settings unavailable for focus restoration")
+            v_orig, a_orig = (float(value) for value in restore_motion_params)
+
             label = f"{from_wl}→{to_wl}"
             cur = int(self._get_current_count())
-
-            from xa_sdk.shared.tlmc_type_structures import (  # type: ignore
-                TLMC_ScaleType,
-                TLMC_Unit,
-            )
-
-            v_orig = self.settings.value("stage_v2_mm_s", 0.01368, float)
-            a_orig = self.settings.value("stage_a2_mm_s2", 1.5, float)
-
-            V_FAST = 1.5   # mm/s
-            A_FAST = 0.5   # mm/s^2
 
             fast_applied = False
             try:
                 try:
-                    v_fast_dev = int(
-                        round(
-                            self.camera.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
-                                V_FAST,
-                            )
-                        )
+                    stage.set_focus_motion_params(
+                        FOCUS_CORRECTION_VELOCITY_MM_S,
+                        FOCUS_CORRECTION_ACCELERATION_MM_S2,
                     )
-                    a_fast_dev = int(
-                        round(
-                            self.camera.convert_from_physical_to_device(
-                                TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                TLMC_Unit.TLMC_Unit_Millimetres,
-                                A_FAST,
-                            )
-                        )
-                    )
-                    self.camera.set_velocity_params(0, a_fast_dev, v_fast_dev)
                     fast_applied = True
                 except Exception as ee:
                     self.sig_status.emit(
@@ -340,25 +265,7 @@ class FilterController(QObject):
             finally:
                 if fast_applied:
                     try:
-                        v_orig_dev = int(
-                            round(
-                                self.camera.convert_from_physical_to_device(
-                                    TLMC_ScaleType.TLMC_ScaleType_Velocity,
-                                    TLMC_Unit.TLMC_Unit_Millimetres,
-                                    v_orig,
-                                )
-                            )
-                        )
-                        a_orig_dev = int(
-                            round(
-                                self.camera.convert_from_physical_to_device(
-                                    TLMC_ScaleType.TLMC_ScaleType_Acceleration,
-                                    TLMC_Unit.TLMC_Unit_Millimetres,
-                                    a_orig,
-                                )
-                            )
-                        )
-                        self.camera.set_velocity_params(0, a_orig_dev, v_orig_dev)
+                        stage.set_focus_motion_params(v_orig, a_orig)
                     except Exception as ee:
                         self.sig_status.emit(
                             f"warning: failed to restore filter speed: {ee}"
@@ -549,7 +456,7 @@ class FilterPane(QtWidgets.QGroupBox):
 
         # フォーカス補正用 Controller
         self._focus_controller = FilterController(
-            camera_device=None, profile="default", parent=self
+            camera_backend=None, profile="default", parent=self
         )
 
         # 現在のフィルタ名リスト（スロット名）
@@ -894,7 +801,7 @@ class FilterPane(QtWidgets.QGroupBox):
             self._set_error_text(f"query_status error: {e}")
 
         # カメラステージがすでに設定されている場合だけ、ここでメッセージを出す
-        if self._focus_controller.camera is not None:
+        if self._focus_controller.camera_backend is not None:
             self._on_focus_status("camera stage set for filter controller")
 
     @Slot(object)
@@ -1054,12 +961,10 @@ class FilterPane(QtWidgets.QGroupBox):
         self._focus_controller.set_wavelengths(self._wavelengths)
         self._set_wavelengths(self._wavelengths)
 
-    def set_camera_device(self, device):
-        """
-        StagePanel から渡される camera 軸デバイスを設定。
-        """
-        self._focus_controller.set_camera_device(device)
-        if self.backend is not None:
+    def set_camera_backend(self, backend: Optional[IStageBackend]):
+        """StagePanel から渡される Camera 軸の共通 stage backend を設定。"""
+        self._focus_controller.set_camera_backend(backend)
+        if self.backend is not None and backend is not None:
             self._on_focus_status("camera stage set for filter controller")
 
     def is_stage_sync_enabled(self) -> bool:

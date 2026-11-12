@@ -18,6 +18,13 @@ from .camera_backend_base import ICameraBackend
 
 import numpy as np
 
+# MCC ver1 output format for live view, Snapshot, MOVIE, STEP and saved images.
+# The SDK still supplies uint16 sensor data; its bit_depth determines the right
+# shift to this uint8 output, discarding lower bits when the sensor depth is
+# higher. This declares the supported format, not the sensor's ADC setting.
+# Changing this constant alone does not implement another output format.
+THORLABS_OUTPUT_BITS = 8
+
 # Optional SDK symbols are intentionally loaded only when the user connects this
 # backend.  camera_integration.scan_camera_backends() imports every backend at
 # application startup, so importing the vendor SDK here would make optional
@@ -113,7 +120,7 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         self._seq_fallback: int = 0
 
         # 表示は常に 8bit に固定
-        self._display_bits: int = 8
+        self._display_bits: int = THORLABS_OUTPUT_BITS
 
         # ポーリング用タイマー（擬似「IMAGE イベント」）
         self._timer = QTimer()
@@ -461,6 +468,10 @@ class ThorlabsTLCameraBackend(ICameraBackend):
     # -------------------------------------------------
     # UI 初期化
     # -------------------------------------------------
+    def can_select_bit_depth(self) -> bool:
+        """MCC ver1 exposes one fixed output format for this backend."""
+        return False
+
     def populate_controls(self, pane: Any) -> None:
         """
         SDK から現在値を読み出して UI を初期化。
@@ -474,8 +485,12 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         # ----- bit depth UI -----
         try:
             if hasattr(pane, "ctrl_bit"):
-                # 表示は 8-bit 固定として扱う（実データは 12bit→16bit で扱っている）
+                # The first GUI option is the backend's fixed 8-bit output.
                 pane.ctrl_bit.setCurrentIndex(0)
+                pane.ctrl_bit.setToolTip(
+                    f"Display and saved images are fixed to {THORLABS_OUTPUT_BITS}-bit. "
+                    "Sensor data are converted to this output format."
+                )
         except Exception as e:
             print(f"[ThorlabsTLCameraBackend] populate_controls bit UI error: {e}")
 
@@ -559,14 +574,17 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         Thorlabs SDK に反映。
         ここでは:
           - res_index は populate_controls で仕込んだ dict (binx/biny) を想定
-          - bit_index は無視して「表示は 8-bit 固定」とする
+          - bit_index は無視して表示・記録・保存を 8-bit 固定とする
         """
         if self._cam is None:
             return
 
-        # --- bit depth は Thorlabs では変更不可なので無視する ---
+        # MCC ver1 keeps this backend's output format fixed; binning still applies.
         if bit_index not in (0, None):
-            msg = "Thorlabs camera: 16-bit display mode is not implemented (always handled as 8-bit display)."
+            msg = (
+                "Thorlabs camera: display and saved images are fixed to "
+                f"{THORLABS_OUTPUT_BITS}-bit."
+            )
             print(f"[ThorlabsTLCameraBackend] {msg}")
             # 可能ならステータスバーにも出す（失敗しても無視）
             pane = self._pane
@@ -825,9 +843,9 @@ class ThorlabsTLCameraBackend(ICameraBackend):
 
         #print(f"[ThorlabsTLCameraBackend] frame shape = {h}x{w}, bit_depth={bit_depth}")        # デバッグ用
 
-        # 表示は 8bit 固定にスケール
-        if bit_depth > 8:
-            shift = bit_depth - 8
+        # Convert once to the fixed display, recording and save format.
+        if bit_depth > THORLABS_OUTPUT_BITS:
+            shift = bit_depth - THORLABS_OUTPUT_BITS
             img8 = (img16 >> shift).astype(np.uint8)
         else:
             img8 = img16.astype(np.uint8)
@@ -841,7 +859,7 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         return {
             "w": w,
             "h": h,
-            "bits": 8,              # 表示は 8bit
+            "bits": THORLABS_OUTPUT_BITS,
             "bpl": w,               # 8bit なので 1byte/pixel
             "data": data_bytes,
             "seq": frame.frame_count,
@@ -853,7 +871,7 @@ class ThorlabsTLCameraBackend(ICameraBackend):
     def query_params(self, bits: int):
         """
         CaptureWorker 初期化・再設定用のパラメータ問い合わせ。
-        戻り値: (w, h, bits, bpl, size)  ※ Thorlabs は常に 8bit 表示。
+        戻り値: (w, h, bits, bpl, size)  ※ 表示・記録・保存用の固定出力形式。
         """
         if self._cam is None:
             return None
@@ -870,24 +888,26 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         self._height = h
         self._bit_depth = bit_depth
 
-        # 表示は常に 8bit
+        # Fixed uint8 output; sensor bit_depth remains separate above.
         bpp = 1
         self._bytes_per_pixel = bpp
         self._bpl = w * bpp
         size = h * self._bpl
 
-        return (w, h, 8, self._bpl, size)
+        return (w, h, THORLABS_OUTPUT_BITS, self._bpl, size)
 
 
     def get_current_bit_depth(self) -> int:
-        # 表示ビット深度としては常に 8bit
-        return 8
+        # Application output depth, not the sensor's native bit_depth.
+        return THORLABS_OUTPUT_BITS
 
     def capture_snapshot(self, bits: int):
         """
         カメラから 1 フレームだけ同期取得して返す。
         UI 側では必ず LiveView(Pause) してから呼ぶ前提。
 
+        bits is retained for the shared interface; this backend always returns
+        THORLABS_OUTPUT_BITS, matching query_params() and live/MOVIE frames.
         戻り値: dict (w,h,bits,bpl,data,seq,ts_us,exp_us) or None
         """
         if self._cam is None:
@@ -936,7 +956,7 @@ class ThorlabsTLCameraBackend(ICameraBackend):
         #    print("[ThorlabsTLCameraBackend] capture_snapshot: no frame within timeout")
         #    return None
 
-        # 5) buffer → ndarray → 8bit/16bit に整形（pull_frame_into_buffer とほぼ同じ）
+        # 5) Copy the SDK buffer, then convert to the fixed uint8 output.
         img16 = np.array(frame.image_buffer, copy=True, dtype=np.uint16)
 
         try:
@@ -951,27 +971,21 @@ class ThorlabsTLCameraBackend(ICameraBackend):
 
         img16 = img16.reshape(h, w)
 
-        want_16 = (bits == 16)
+        try:
+            bit_depth = int(self._cam.bit_depth)
+        except Exception:
+            # Preserve the existing fallback when the SDK depth cannot be read.
+            bit_depth = 12
 
-        if want_16:
-            data = img16.tobytes()
-            bpl = w * 2
-            out_bits = 16
+        if bit_depth > THORLABS_OUTPUT_BITS:
+            shift = bit_depth - THORLABS_OUTPUT_BITS
+            img8 = (img16 >> shift).astype(np.uint8)
         else:
-            try:
-                bit_depth = int(self._cam.bit_depth)
-            except Exception:
-                bit_depth = 12
+            img8 = img16.astype(np.uint8)
 
-            if bit_depth > 8:
-                shift = bit_depth - 8
-                img8 = (img16 >> shift).astype(np.uint8)
-            else:
-                img8 = img16.astype(np.uint8)
-
-            data = img8.tobytes()
-            bpl = w
-            out_bits = 8
+        data = img8.tobytes()
+        bpl = w
+        out_bits = THORLABS_OUTPUT_BITS
 
         ts_us = int(time.time() * 1e6)
         seq = getattr(frame, "frame_count", 0)

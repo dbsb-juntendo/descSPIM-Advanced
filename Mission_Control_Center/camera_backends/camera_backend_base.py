@@ -94,6 +94,16 @@ class ICameraBackend(QObject):
 
     # ---- GUI 側の処理を段階的に移していく予定のメソッド ----
 
+    def can_select_bit_depth(self) -> bool:
+        """Whether the GUI should enable output-bit-depth selection.
+
+        The default preserves the existing selectable controls. Fixed-output
+        backends override this and set their selected value and explanation in
+        populate_controls(). This capability does not specify the output depth;
+        get_current_bit_depth()/query_params() report that separately.
+        """
+        return True
+
     def populate_controls(self, pane: "CameraPane") -> None:
         """
         GUI（CameraPane）のコントロールを SDK の現在値で初期化する。
